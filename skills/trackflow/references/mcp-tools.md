@@ -166,7 +166,7 @@ Errors: `Enter a valid domain, e.g. example.com (HTTP 400)`; `You already have a
 | `platform` | enum | as create_site |
 | `settings` | object | Only the keys given change. Allowed keys below |
 
-`settings` keys (all boolean except `cross_domains`):
+`settings` keys (all boolean except `cross_domains` and `default_currency`):
 
 | Key | Meaning |
 |---|---|
@@ -178,6 +178,7 @@ Errors: `Enter a valid domain, e.g. example.com (HTTP 400)`; `You already have a
 | `block_reloads` | Ignore the PageView of a page reload |
 | `dedup` | Store/send each `event_id` + event name once. Keep on |
 | `allow_custom_js` | Run `custom_js` tag actions (default on). Off = every custom JS stops at once. Change only when the customer asks |
+| `default_currency` | ISO 4217 code (e.g. `EUR`, `BDT`); used when an event has a value but no/invalid currency (else USD). Invalid codes are rejected. Set it for every non-USD shop |
 | `cross_domains` | string array, e.g. `["checkout.example.net"]`; **replaces the whole list** |
 
 Errors: `Use set_conversion_events to choose conversion events.` (if `settings.conversion_events` given); `Unknown setting(s): x. Allowed: …`; `Nothing to change: pass name, domain, platform or settings.`
@@ -455,7 +456,7 @@ Providers (label only): `stripe, calendly, typeform, shopify, woocommerce, cal, 
 | `update_webhook_integration` | `site_id`*, `integration_id`*, same fields | `mapping` replaced as a whole; URL unchanged |
 | `delete_webhook_integration` | `site_id`*, `integration_id`* | URL returns 404 afterwards |
 
-`mapping` (closed object, all optional dot paths): `email_path, phone_path, name_path, first_name_path, last_name_path, value_path, value_divisor (number, 100 for cents), currency_path, default_currency, event_id_path, visitor_path, url_path, fbc_path, fbp_path, filter_path, filter_value`. **Set `event_id_path`**: without it every retry creates a new event. Prefer checkout integrations for payment providers and CRM integrations for CRMs.
+`mapping` (closed object, all optional dot paths): `email_path, phone_path, name_path, first_name_path, last_name_path, value_path, value_divisor (number, 100 for cents), currency_path, default_currency, event_id_path, event_id_prefix, visitor_path, url_path, fbc_path, fbp_path, filter_path, filter_value`. **Set `event_id_path`**: without it every retry creates a new event. Prefer checkout integrations for payment providers and CRM integrations for CRMs.
 
 ### Offline conversions
 | Action | Params | Notes |

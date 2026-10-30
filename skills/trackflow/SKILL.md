@@ -93,7 +93,7 @@ destinations {"action": "help", "of": "add_destination"}
    While a test field is set, **all** server events of that destination go to test mode, so remove it
    before go-live. Headless/automated browsers are blocked as bots: test in a normal browser.
 7. **Real values only.** Purchases need a numeric `value`, an ISO-4217 `currency` and a unique
-   `order_id`. A value without currency is reported as **USD**. Values are numbers in major units
+   `order_id`. A value without a valid ISO currency gets the site's `default_currency` (set it with `update_site`), else **USD**. Values are numbers in major units
    (`129.90`, not `"$129.90"` or `12990`). Use the event id `purchase_<order id>` on every source
    (tag, dataLayer, checkout integration) so one order counts once. Never hard-code a value. See
    [references/event-parameters.md](references/event-parameters.md).

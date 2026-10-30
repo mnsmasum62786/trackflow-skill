@@ -96,7 +96,7 @@ Empty values (`""`, `null`) are dropped before sending.
 | Key | Type | Rule / TrackFlow behaviour |
 |---|---|---|
 | `value` | number | Major units (`129.90`, not cents). Converted with `Number()`. A **numeric string** (`"49.90"`) is fine; a string with symbols or separators (`"$1,299.00"`) is **not parsed** by the JS API or server API (only container tags parse prices). |
-| `currency` | string | ISO 4217. TrackFlow uppercases and keeps the first 3 chars — it does **not** validate (`"$"` stays `"$"`). **If `value` is set without `currency`, TrackFlow sends `USD`.** |
+| `currency` | string | ISO 4217. Uppercased and validated: an invalid code (`"$"`, `"EURO"`) is dropped. **If `value` is set and the currency is missing or invalid, TrackFlow uses the site's `default_currency`, else `USD`.** Set `default_currency` with `update_site` for non-USD shops. |
 | `content_ids` | string[] | Product IDs / SKUs; match catalog IDs for catalog/dynamic ads. Used to build items when `contents` is absent (quantity 1). |
 | `contents` | `[{id, quantity, item_price}]` | Preferred item list (wins over `content_ids`). `item_price` = unit price. |
 | `content_type` | string | `product` or `product_group`. |
@@ -212,8 +212,8 @@ TrackFlow fills these itself — do not ask the user for them:
 
 Server-side events (API, webhook, CRM, offline) with a `visitor_id` inherit that visitor's stored click IDs, IP and UA,
 and identifiers learned earlier in the journey (e.g. a form email) are merged into later events.
-Server API gotcha: only `fbc` and `fbp` are read as top-level fields; pass every other click ID inside `click_ids`
-(e.g. `"click_ids": {"ttclid": "…", "gclid": "…"}`).
+Server API: click IDs (`fbc`, `fbp`, `ttclid`, `ttp`, `gclid`, `gbraid`, `wbraid`, `msclkid`, …) may be sent top-level or
+inside `click_ids`; top-level wins.
 
 ---
 
@@ -246,7 +246,7 @@ Value rule of thumb: send `value` + `currency` **together on every event that ha
 | PII in event names or custom parameter names | Names go to every platform as-is. |
 | `value` as a formatted string (`"$1,299.00"`, `"1.299,00"`) via JS API / server API | Not parsed: Meta gets the raw string (likely rejected), other platforms drop the value. Send `1299.00`. |
 | `value` in cents/minor units | Every platform expects major units (TrackFlow converts to minor units itself for OpenAI). |
-| `value` without `currency` | Silently becomes `USD`. |
+| `value` without (valid) `currency` | Becomes the site's `default_currency` (else USD); set `default_currency` for non-USD shops. |
 | Non-ISO currency (`"$"`, `"Tk"`, `"Euro"`) | Only uppercased + cut to 3 chars, never validated. Quora ignores currency (account currency); Taboola/Outbrain drop value for unsupported currencies. |
 | Purchase without `order_id` / stable event ID | Reloaded thank-you pages and browser + webhook copies cannot be deduplicated; Google Ads/GA4 fall back to the random event ID. |
 | The same conversion from two sources with different event IDs | TrackFlow and platforms count both (e.g. a thank-you-page tag plus a Stripe webhook). Pick one source or share the ID. |

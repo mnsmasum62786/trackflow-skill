@@ -41,7 +41,7 @@ API keys (`tf_live_…`) are created in the dashboard (Connect AI → API keys) 
 | `event_id` | string | recommended | ≤ 64 chars; random if absent. **Use the same id the browser sent** for the same action so browser + server deduplicate (in TrackFlow and on the platforms) |
 | `visitor_id` | string | recommended | TrackFlow visitor id (cookie `_tf_vid`, or `trackflow('vid')` in the browser). Links the event to the visitor's journey and inherits their stored click ids, IP and user agent |
 | `user_data` | object | recommended | Raw or already SHA-256-hashed (64 hex) values; normalized + hashed server-side. Keys: `em, ph, fn, ln, ct, st, zp, country, db, ge, external_id`; aliases accepted: `email, phone, mobile, first_name, last_name, city, state, zip, postal_code, country_code, dob, gender, user_id`; `name` is split into fn/ln. Phone: include the country code |
-| `custom_data` | object | no | `value`, `currency` (ISO 3-letter; defaults to USD when value is set), `order_id`, `content_ids`, `contents[{id, quantity, item_price}]`, `content_type`, `content_name`, `num_items`… |
+| `custom_data` | object | no | `value`, `currency` (ISO 4217, validated; missing/invalid → the site's `default_currency` (else USD) when value is set), `order_id`, `content_ids`, `contents[{id, quantity, item_price}]`, `content_type`, `content_name`, `num_items`… |
 | `click_ids` | object | no | `fbc, fbp, gclid, gbraid, wbraid, msclkid, ttclid, ttp, …` |
 | `fbc`, `fbp` | string | no | Top-level shortcut for Meta cookies |
 | `url`, `referrer` | string | no | Page URL drives source/campaign attribution (UTMs, click ids) |

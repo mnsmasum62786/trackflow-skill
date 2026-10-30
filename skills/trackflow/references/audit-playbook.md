@@ -43,7 +43,7 @@ period: the last 30 days.
 - Off-site sales (Stripe, PayPal, Shopify checkout, Calendly, CRM) come in through an integration.
 
 **C. Data quality**
-- Purchases: numeric `value` > 0, correct ISO `currency` (not silently USD), unique `order_id`.
+- Purchases: numeric `value` > 0, correct ISO `currency` (not falling back to USD; set `default_currency`), unique `order_id`.
 - Event names are the standard, case-correct names for standard actions.
 - No PII in custom properties, event names or URLs.
 - Products: `content_ids` match the catalog ids when the customer runs catalog/dynamic ads.

@@ -245,7 +245,7 @@ Prefix `not_` to negate (`not_regex`, `not_exists`). Aliases: `eq`, `=`, `starts
 Canonical `custom_data` keys: `value`, `currency`, `content_ids`, `contents[{id, quantity, item_price}]`,
 `content_type`, `content_name`, `content_category`, `num_items`, `order_id`, `search_string`, `status`,
 `predicted_ltv`. Cleaning: `value` parsed as a price and rounded to 2 decimals (dropped if not a number);
-`currency` → ISO code (if a value exists and currency is missing, the server uses **USD**); empty
+`currency` → ISO code (if a value exists and currency is missing or invalid, the site's `default_currency` (else USD)); empty
 `content_ids`/`contents` items dropped.
 
 ### event_id and dedup

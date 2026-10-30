@@ -301,7 +301,7 @@ email or phone (plus the country code on phones).
 
 Mapping keys (dot paths into the JSON body): `email_path`, `phone_path`, `name_path`, `first_name_path`,
 `last_name_path`, `value_path`, `value_divisor` (100 for cents), `currency_path`, `default_currency`,
-`event_id_path` (**set it**: otherwise each retry is a new event), `visitor_path` (TrackFlow vid →
+`event_id_path` (**set it**: otherwise each retry is a new event), `event_id_prefix` (e.g. `purchase_` to match `purchase_<order id>` from the tag / checkout integration), `visitor_path` (TrackFlow vid →
 joins the journey), `url_path`, `fbc_path`, `fbp_path`, `filter_path` + `filter_value` (accept only
 matching bodies). No signature check; `update_webhook_integration` replaces `mapping` as a whole.
 

@@ -165,9 +165,8 @@ Elementor Pro (`elementor`), Gravity Forms (`gravity`), WPForms (`wpforms`), Nin
      <?php
    });
    ```
-   The TrackFlow docs' older version uses the order *key* as ID; that only deduplicates with a mapped
-   webhook whose `event_id_path` is `order_key`, **not** with the checkout integration
-   (`purchase_<order ID>`). If the integration's `order_id_field` is `number`, use the order number.
+   This ID matches the WooCommerce checkout integration and a mapped webhook with `event_id_path: "id"`
+   + `event_id_prefix: "purchase_"`. If the integration's `order_id_field` is `number`, use the order number.
    If the dataLayer bridge handles `purchase`, its ID is `purchase_<transaction_id>`: make sure the
    plugin's `transaction_id` is the same order ID, and don't add this PHP snippet as well.
 

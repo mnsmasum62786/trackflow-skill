@@ -129,7 +129,7 @@ Canonical keys (Meta naming). The server maps them to each platform's fields.
 | Key | Type | Meaning / rules |
 |---|---|---|
 | `value` | number | Major units (`129.90`, not `12990`, not `"€129,90"`). Non-numeric strings are not converted into a value. |
-| `currency` | string | ISO 4217, uppercased, 3 letters. **If `value` is sent without `currency`, `USD` is assumed.** |
+| `currency` | string | ISO 4217, uppercased, 3 letters. **If `value` is sent without a valid `currency`, the site's `default_currency` (else USD) is used.** |
 | `content_ids` | string[] | Product IDs/SKUs. Must match the product catalog IDs for catalog/dynamic ads. |
 | `contents` | `[{ id, quantity, item_price }]` | Per-line items. Preferred over `content_ids` for platforms that take line items; if absent they are built from `content_ids` with quantity 1. |
 | `content_type` | string | `product` or `product_group`. |
@@ -364,7 +364,7 @@ chars; event name and event ID 64 chars.
 | Two TrackFlow tags with different site keys on one page | Both track | One site key per website |
 | Calling `track` from the standard tag's inline script before it loads, without the stub | `trackflow is not defined` | Add the queue stub |
 | `value` as text (`"$49"`) or in cents | Wrong/missing revenue | Number in major units |
-| `value` without `currency` | Silently reported as USD | Always send both |
+| `value` without `currency` | Reported in the site's `default_currency` (else USD) | Always send both |
 | Firing Purchase on button click / every thank-you reload | Inflated conversions | Fire after success; pass `{ id: 'purchase_<order id>' }` |
 | Browser Purchase ID ≠ webhook ID for the same order | Order counted twice | Same `purchase_<order id>` on both sides |
 | `lead` vs `Lead` | Custom event, not the standard Lead | Exact standard names |
