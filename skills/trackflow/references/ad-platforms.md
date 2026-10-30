@@ -427,3 +427,28 @@ Measurement Pixel (`oaiq`) + Conversions API (`bzr.openai.com/v1/events?pid=<pix
   `source_url` (else `action_source: other`). Geo (country/city/region/postal) only from the browser.
 - Dedup: `event_id` = `events[].id`, first copy kept. Server events > 7 days old skipped. Browser uses `measureSingle`
   so other OpenAI pixels on the site are unaffected.
+
+## Custom destination (generic outbound webhook) — `custom`
+
+Use it when the customer wants a platform that is **not** in the built-in list (Klaviyo, Criteo, an
+in-house backend, a data warehouse endpoint, …). Server-side only (no browser tag), so mode is `server`.
+
+| Field | Notes |
+|---|---|
+| `url` | **https only.** Localhost, private, loopback and link-local hosts are rejected at save time, and DNS is re-checked on every send. Redirects are not followed. |
+| `method` | `POST` (default), `PUT` or `PATCH` |
+| `headers` | Object of request headers (API keys, version headers). Values are secrets: stored server-side and returned masked. Updating `headers` **replaces the whole set**: send every header you want to keep. |
+| `events` | Optional allow-list of event names; empty = every event. |
+| `payload_template` | Optional JSON with `{{path}}` placeholders, e.g. `{{event_name}}`, `{{event_id}}`, `{{event_time}}`, `{{value}}`, `{{currency}}`, `{{order_id}}`, `{{url}}`, `{{ip}}`, `{{user_agent}}`, `{{custom_data.*}}`, `{{user_data.*}}`, `{{click_ids.*}}`, `{{contents}}`. Unresolved placeholders become `null`. Must be valid JSON (checked on save). Without a template TrackFlow sends its standard JSON. |
+| `signing_secret` | Optional. Adds `X-TrackFlow-Signature: sha256=<hex HMAC-SHA256 of the raw body>` (plus `X-TrackFlow-Timestamp`, not part of the signature). |
+| `test_mode` | Test field: while on, test events are delivered and **every** request carries `test: true` / `X-TrackFlow-Test: 1`. Turn it off before go-live. |
+
+Behaviour: `event_id` is always in the body and in `X-TrackFlow-Event-Id`, so the receiver can dedup.
+User data is only available as **SHA-256 hashes** (TrackFlow never stores raw PII). 10 s timeout per
+attempt; 429/5xx/network errors retry twice, other 4xx fail immediately; 2xx = delivered.
+
+How an agent sets it up: read the target platform's API docs, then
+`destinations → list_platforms` (the `custom` entry includes an example), `add_destination`
+`{"type": "custom", "config": {"url": "...", "headers": {...}, "payload_template": {...}, "events": ["Purchase"]}}`,
+turn on `test_mode`, run `test_destination` and read the receiver's response in `get_event`, then turn
+`test_mode` off.

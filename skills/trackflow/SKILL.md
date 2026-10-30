@@ -167,7 +167,7 @@ Full version with a symptom → cause → fix table:
 | Browser tracker commands (`trackflow(...)`), SPA, cookies, click IDs | [references/tracker-js.md](references/tracker-js.md) |
 | Install per CMS / framework, ecommerce events per platform | [references/install-cms.md](references/install-cms.md) |
 | Event names, parameters, user data, what to send and what not to send | [references/event-parameters.md](references/event-parameters.md) |
-| Per ad platform: credentials, modes, gotchas | [references/ad-platforms.md](references/ad-platforms.md) |
+| Per ad platform (and the `custom` webhook destination for any other platform): credentials, modes, gotchas | [references/ad-platforms.md](references/ad-platforms.md) |
 | Tags, triggers, variables, recipes, versions, preview | [references/tag-manager.md](references/tag-manager.md) |
 | Checkout webhooks, CRM, offline conversions, third-party tools | [references/integrations.md](references/integrations.md) |
 | Custom tracking domain, ad-blocker resistance, blocking rules | [references/first-party-domain.md](references/first-party-domain.md) |

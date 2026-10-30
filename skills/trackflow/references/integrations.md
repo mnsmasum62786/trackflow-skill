@@ -307,6 +307,11 @@ matching bodies). No signature check; `update_webhook_integration` replaces `map
 
 ---
 
+### Verification secret and dedup (mapped webhooks)
+
+- Optional `secret` (8–200 chars). When set, a request must carry `X-TrackFlow-Signature: sha256=<hex HMAC-SHA256(raw body, secret)>`, or (for Zapier/Make, which can't sign) the secret in an `X-Webhook-Secret` header or `?secret=` query. Otherwise `401`. Returned masked with `secret_set`; omit to keep, `""` to clear.
+- Always map `mapping.event_id_path` to the order/booking id. Without it, create/update return a `warnings` entry and TrackFlow dedups only byte-identical retries (id = hash of integration + raw body), so a retry with any changed field counts twice, and two truly separate but identical payloads count once.
+
 ## 6. Google Ads sign-in (OAuth)
 
 Google Ads server-side delivery (Data Manager API) needs a refresh token; TrackFlow gets it through
