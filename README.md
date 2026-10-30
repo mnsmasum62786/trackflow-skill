@@ -26,6 +26,8 @@ everything, publishes and verifies the live events.
 | Meta Pixel + CAPI, TikTok, Google Ads, GA4, Snapchat, Pinterest, LinkedIn, Reddit, X, Microsoft … | [`ad-platforms.md`](skills/trackflow/references/ad-platforms.md) |
 | Built-in tag manager: tags, triggers, variables, recipes, versions | [`tag-manager.md`](skills/trackflow/references/tag-manager.md) |
 | Checkout webhooks, CRMs, offline conversions | [`integrations.md`](skills/trackflow/references/integrations.md) |
+| Linking server orders to the ad click (visitor-id passthrough) | [`visitor-id.md`](skills/trackflow/references/visitor-id.md) |
+| Refunds, cancellations, renewals and cash on delivery | [`lifecycle-events.md`](skills/trackflow/references/lifecycle-events.md) |
 | First-party tracking domain (ad-blocker resistance), blocking rules | [`first-party-domain.md`](skills/trackflow/references/first-party-domain.md) |
 | Reading reports and diagnosing problems | [`reports-and-audit-data.md`](skills/trackflow/references/reports-and-audit-data.md) |
 | Setup and audit checklists | [`setup-playbook.md`](skills/trackflow/references/setup-playbook.md), [`audit-playbook.md`](skills/trackflow/references/audit-playbook.md) |

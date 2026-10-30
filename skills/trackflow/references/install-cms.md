@@ -19,7 +19,9 @@ general platform knowledge, marked as such.
    - `auto` → stealth or custom-domain loader with a **random JS global** (field `global`). If you use
      it, replace `trackflow` in every snippet below with that name. See
      [first-party-domain.md](first-party-domain.md).
-   Hand the customer the returned `html` verbatim.
+   - `shopify_pixel` → Shopify only: `code` (plain JavaScript) for *Settings → Customer events → Add
+     custom pixel*, not a `<head>` tag. See section 4.
+   Hand the customer the returned `html` (or `code`) verbatim.
 2. **Find existing pixels**: `tag_manager {"action": "inspect_site", "site_id": N, "url": "https://example.com/"}`
    on home, product, checkout and thank-you pages. Ask the customer which apps/plugins installed Meta,
    TikTok, Google, etc.
@@ -122,27 +124,27 @@ Elementor Pro (`elementor`), Gravity Forms (`gravity`), WPForms (`wpforms`), Nin
 ## 3. WooCommerce
 
 1. Install the tag as for WordPress.
-2. **Purchases, server-side (recommended):** checkout integration for WooCommerce
-   (`integrations` → `list_checkout_providers`, then `create_checkout_integration` with provider
-   `woocommerce`). Give the customer the returned webhook URL:
-   *WooCommerce → Settings → Advanced → Webhooks → Add webhook*: Status **Active**, Topic **Order
-   created** (and/or **Order updated**), Delivery URL = TrackFlow URL, a **Secret** → paste the same
-   secret into TrackFlow (`update_checkout_integration`). Counted when status is `processing` or
-   `completed`. Event ID = `purchase_<order ID>`.
-3. **Tie orders to the ad click** (save the visitor ID on the order):
-   ```php
-   // functions.php or a snippets plugin
-   add_action('woocommerce_checkout_create_order', function ($order) {
-     if (!empty($_COOKIE['_tf_vid'])) $order->update_meta_data('_tf_vid', sanitize_text_field($_COOKIE['_tf_vid']));
-   });
-   // Block (Store API) checkout: use the woocommerce_store_api_checkout_update_order_meta hook instead.
-   ```
+2. **Tie orders to the ad click:** give the customer the visitor-id snippet from
+   [visitor-id.md](visitor-id.md) §4.1 (Code Snippets plugin or `wp-content/mu-plugins/trackflow-vid.php`).
+   It saves order meta `tf_vid`, `tf_fbc`, `tf_fbp` for the classic and the block checkout. (Older setups
+   saved `_tf_vid`; it is still read.)
+3. **Purchases from the WooCommerce webhook (recommended backup, also refunds and cancellations):**
+   `integrations → list_checkout_providers`, then `create_checkout_integration` with provider
+   `woocommerce` and `config.purchase_on` (`paid` default; `created_cod` for cash on delivery; `completed`
+   for delivered-only). Customer: *WooCommerce → Settings → Advanced → Webhooks → Add webhook* **twice**:
+   topics **Order created** and **Order updated**, Status **Active**, Delivery URL = TrackFlow URL, the same
+   **Secret** in both → paste it into TrackFlow (`update_checkout_integration`). Paid, completed,
+   cancelled and refunded orders all arrive as "order updated". Event ID = `purchase_<order ID>`;
+   cancelled/failed → `OrderCancelled`, refunds → `OrderRefunded`
+   ([lifecycle-events.md](lifecycle-events.md)).
+   Older setups used a mapped webhook for WooCommerce: once the checkout integration works, delete the old
+   webhook in WooCommerce and the old integration in TrackFlow (no signature check, no refunds).
 4. **Funnel events (ViewContent, AddToCart, InitiateCheckout):**
    - If a GA4/GTM plugin already pushes GA4 ecommerce events → `ecommerce_datalayer: true`.
    - Otherwise `apply_recipe ecommerce` (knows WooCommerce product, cart, checkout and order-received
      selectors).
-5. **Optional browser Purchase on the order-received page** (only if you want a browser copy too). Use
-   the **same ID as the webhook** so they deduplicate:
+5. **Browser Purchase on the order-received page** (recommended together with the webhook). Use the
+   **same ID as the webhook** so they deduplicate:
    ```php
    add_action('woocommerce_thankyou', function ($order_id) {
      $order = wc_get_order($order_id);
@@ -151,7 +153,7 @@ Elementor Pro (`elementor`), Gravity Forms (`gravity`), WPForms (`wpforms`), Nin
      $custom = [
        'value' => (float) $order->get_total(), 'currency' => $order->get_currency(),
        'content_ids' => array_values(array_map(fn($i) => (string) $i->get_product_id(), $order->get_items())),
-       'num_items' => $order->get_item_count(), 'order_id' => (string) $order->get_order_number(),
+       'num_items' => $order->get_item_count(), 'order_id' => (string) $order->get_id(),
      ];
      $user = [ 'em' => $order->get_billing_email(), 'ph' => $order->get_billing_phone(),
        'fn' => $order->get_billing_first_name(), 'ln' => $order->get_billing_last_name(),
@@ -165,10 +167,11 @@ Elementor Pro (`elementor`), Gravity Forms (`gravity`), WPForms (`wpforms`), Nin
      <?php
    });
    ```
-   This ID matches the WooCommerce checkout integration and a mapped webhook with `event_id_path: "id"`
-   + `event_id_prefix: "purchase_"`. If the integration's `order_id_field` is `number`, use the order number.
+   This ID matches the WooCommerce checkout integration (and its `order_id`, so refunds find the order and
+   its visitor). If the integration's `order_id_field` is `number`, use the order number in both places.
    If the dataLayer bridge handles `purchase`, its ID is `purchase_<transaction_id>`: make sure the
-   plugin's `transaction_id` is the same order ID, and don't add this PHP snippet as well.
+   plugin's `transaction_id` is the same order ID, and don't add this PHP snippet as well. With
+   `purchase_on: "completed"` (delivered-only), send another event here instead of `Purchase`.
 
 **Pitfalls:** Facebook for WooCommerce / TikTok for WooCommerce / PixelYourSite also fire Purchase →
 disable their pixel or events. Orders paid later (bank transfer, redirects that skip the thank-you
@@ -178,68 +181,77 @@ page) are only caught by the webhook.
 
 ## 4. Shopify
 
-**Install (storefront):** *Online Store → Themes → ⋯ → Edit code → Layout → `theme.liquid`* → paste the
-snippet on the line just before `</head>` → Save.
+Shopify's checkout and order-status ("Thank you") pages don't run `theme.liquid`. Since Checkout
+Extensibility, outside code there can only run as a pixel under **Settings → Customer events**, in
+Shopify's sandbox. TrackFlow ships a **Customer Events code** built for that sandbox: it is the main
+install on Shopify and covers the whole store, checkout and thank-you page included. The order webhook backs
+it up; the theme tag is optional.
 
-**Checkout and thank-you limitation:** Shopify's checkout and order-status ("Thank you") pages do not
-render `theme.liquid`. With Checkout Extensibility, third-party code there can only run as an app pixel
-or a custom pixel under *Settings → Customer events*, inside a sandboxed iframe. **TrackFlow ships no
-Customer Events pixel**; do not paste the TrackFlow tag into Customer Events (it would run in the sandbox,
-not on the storefront page). Track purchases **server-side**:
+### 4.1 Customer Events code (main method)
 
-1. `create_checkout_integration` with provider `shopify` → webhook URL.
-2. Customer: *Settings → Notifications → Webhooks → Create webhook*, Event **Order payment**
-   (`orders/paid`) or **Order creation** (`orders/create`) — pick one, Format **JSON**, URL = TrackFlow.
-   Copy the signing secret shown under the webhooks list into TrackFlow
-   (`update_checkout_integration`). Cancelled orders are skipped; test orders only with
-   `config.accept_test: true`. Event ID = `purchase_<order id>`.
-3. Stitch orders to the ad click: save the visitor ID as cart attribute `_tf_vid` (it lands in the
-   order's `note_attributes`). Add after the TrackFlow tag in `theme.liquid`:
-   ```html
-   <script>
-   (function () {
-     var G = 'trackflow';               // or the stealth global from get_install_snippet
-     var n = 0;
-     (function save() {
-       var tf = window[G], vid = tf && tf._tf ? tf('vid') : '';
-       if (!vid) { if (++n < 40) setTimeout(save, 500); return; }   // waits for load and consent
-       fetch('/cart.js').then(function (r) { return r.json(); }).then(function (cart) {
-         if (cart.attributes && cart.attributes._tf_vid === vid) return;
-         return fetch('/cart/update.js', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ attributes: { _tf_vid: vid } }) });
-       }).catch(function () {});
-     })();
-   })();
-   </script>
-   ```
-   Click IDs in the order's landing URL and the order's browser IP/user agent are used too.
+1. `install {"action": "get_install_snippet", "site_id": N, "mode": "shopify_pixel"}` → `{mode, src,
+   code, notes}`. `code` is plain JavaScript (not a `<script>` tag) with the site key and the right
+   address already in it (the custom tracking domain when one is active, else a random path on the
+   TrackFlow host). Hand it over verbatim.
+2. Customer: *Shopify admin → Settings → Customer events → Add custom pixel* → name it **TrackFlow** →
+   delete the example code, paste the code → **Save** → **Connect**.
+   Customer privacy on the pixel: "Not required" lets TrackFlow apply its own `consent_mode`; "Required"
+   makes Shopify hold the pixel until the visitor accepts. With `consent_mode` on, the code waits for
+   Shopify's customer privacy API to report marketing + analytics consent.
+3. **Switch on what it should send** (new sites send nothing):
 
-**Funnel events on the storefront:** `apply_recipe ecommerce` (Shopify product/cart/AJAX add-to-cart
-aware), or Liquid on the product template, e.g.:
-```liquid
-{% if template contains 'product' %}
-<script>
-  window.trackflow = window.trackflow || function () { (window.trackflow.q = window.trackflow.q || []).push(arguments); };
-  trackflow('track', 'ViewContent', {
-    content_ids: ['{{ product.selected_or_first_available_variant.id }}'], content_type: 'product',
-    content_name: {{ product.title | json }},
-    value: {{ product.selected_or_first_available_variant.price | divided_by: 100.0 }},
-    currency: {{ cart.currency.iso_code | json }}
-  });
-</script>
-{% endif %}
-```
-(Shopify prices are in cents, hence `divided_by: 100.0`. `content_ids` must use the same ID format as
-the Meta/TikTok catalog, which for Shopify-synced catalogs is often not the bare variant ID; check the
-catalog.)
+   | Shopify event | TrackFlow event | Sent when |
+   |---|---|---|
+   | Every page view (incl. checkout and thank-you) | `PageView` | site setting `auto_pageview`, or published `page_view` tags (run inside the pixel) |
+   | Product viewed, search, added to cart, checkout started, payment info submitted, checkout completed | `ViewContent`, `Search`, `AddToCart`, `InitiateCheckout`, `AddPaymentInfo`, `Purchase` | site setting `ecommerce_datalayer`, or a published tag that sends that event name (each name separately; the pixel then sends it from Shopify's own data instead of running the tag) |
+   | Collection viewed, cart viewed, shipping info submitted | `ViewCategory`, `ViewCart`, `AddShippingInfo` | only with container setting `shopify_events` (`true` = all three, or a list), then `publish_version` |
 
-**Pitfalls:**
-- Shopify's **Facebook & Instagram** and **TikTok** sales channels install their own pixel (and often
-  their own server events) that also report Purchase. Disconnect that pixel / set data sharing to the
-  lowest level, or keep it and don't connect the same platform in TrackFlow. Otherwise double counting.
-- Remove pixel code pasted in `theme.liquid` or in custom pixels under Customer events.
-- Google & YouTube channel / GA4 apps: same rule for Google Ads/GA4 destinations.
-- Theme switch = reinstall the snippet in the new theme.
+   `Purchase` carries value, currency, variant-id contents, the buyer's details (hashed), and event ID
+   **`purchase_<numeric Shopify order id>`**, the same id the order webhook uses. The pixel can't see
+   clicks, scrolling or theme forms precisely (sandbox): published click/form tags run only if their
+   trigger and conditions use data the sandbox has (simple `#id` / `[attr]` selectors, no click text).
+4. **Check detection:** `get_site` → `shopify_pixel_detected: true` / `shopify_pixel_seen_at` once the
+   code has sent events from **3 different visitors** in the last 14 days. Then `list_events`.
+
+### 4.2 Order webhook (backup: missed purchases, refunds, cancellations)
+
+1. `create_checkout_integration` with provider `shopify` and `config.purchase_on` (`paid` default;
+   `created_cod` for cash on delivery; `completed` = fulfilled).
+2. Customer: *Settings → Notifications → Webhooks → Create webhook*, Format **JSON**, URL = TrackFlow, one
+   webhook **per topic**: `orders/create`, `orders/paid`, `orders/fulfilled`, `orders/cancelled`,
+   `refunds/create`. Copy the signing secret shown under the list ("Your webhooks will be signed with…")
+   into TrackFlow (`update_checkout_integration`). **Send test** → `get_checkout_log`.
+3. The webhook uses the same `purchase_<order id>` as the Customer Events code: whichever arrives second is
+   a duplicate (it still updates the order record). It finds the visitor by the order id (pixel Purchase),
+   the cart attributes, email/phone, or click ids in the order's landing URL. Test orders only with
+   `config.accept_test: true`.
+4. Older guides used a mapped webhook for Shopify orders: delete it in Shopify and TrackFlow; the checkout
+   integration replaces it.
+
+### 4.3 Optional: the website tag in the theme (hybrid)
+
+Only needed for custom tracking on storefront pages (WhatsApp/button clicks, scroll depth, newsletter
+forms, own JavaScript) — and it writes the cart attributes `_tf_vid`, `_tf_fbc`, `_tf_fbp`, `_tf_gclid`
+automatically, which helps the webhook match orders whose thank-you page never loaded.
+`get_install_snippet` (`auto`) → *Online Store → Themes → ⋯ → Edit code → `layout/theme.liquid`* → paste
+just before `</head>` → Save. Theme switch = paste again.
+
+**Nothing is counted twice:** once the Customer Events code is detected, the theme tag skips exactly the
+events the pixel sends (PageView while `auto_pageview` is on; the funnel names enabled by
+`ecommerce_datalayer` or published tags). Its own click/scroll/form tags keep working. Don't build
+`apply_recipe ecommerce` or Liquid funnel tags on top: the pixel already sends those events.
+
+### Pitfalls
+
+- `inspect_site` on a Shopify page reports `existing_tags.shopify_pixels` (Meta pixel ids, TikTok pixel
+  codes, number of custom pixels found in the store's web-pixel config) and `google_ads` (`AW-…`), with
+  suggestions. Shopify's **Facebook & Instagram**, **TikTok** and **Google & YouTube** channel apps load
+  their own pixel (and often server events) for the same ids: disconnect that pixel or set data sharing to
+  the lowest level, or don't connect the same platform in TrackFlow. Otherwise double counting.
+- Remove other custom pixels under Customer events that load the same pixel ids, and pixel code pasted in
+  `theme.liquid`.
+- A custom tracking domain added later: copy the Customer Events code again and replace it in Shopify.
+- `content_ids` are variant ids; Meta/TikTok catalogs synced from Shopify may use another format; check.
 
 ---
 
@@ -320,7 +332,10 @@ without full reloads; route changes are tracked automatically. Forms: preset `fr
 
 - ClickFunnels 2.0: site/funnel **Settings → Tracking code → Header code** → paste.
 - Purchases: `page_view` tag on the order-confirmation step (read value/order ID from the page or
-  URL with variables), or a server source. ClickFunnels checkout links are recognised by `inspect_site`.
+  URL with variables) with `event_id: purchase_<order id>`, plus the `clickfunnels` checkout integration
+  (ClickFunnels 2.0 webhooks, signed; also refunds and subscription events; [integrations.md](integrations.md)).
+  It has no visitor-id passthrough, so the thank-you Purchase with the order id is what links the webhook
+  to the ad click. ClickFunnels checkout links are recognised by `inspect_site`.
 - Remove pixels added in ClickFunnels' own tracking-code boxes for platforms TrackFlow now loads.
 
 ---
@@ -391,10 +406,14 @@ TrackFlow does not need GTM, but can be loaded through it:
 through it is blocked too; a direct `<head>` install is more robust. Don't install both hard-coded and
 via GTM: the second copy is skipped by the double-install guard, but whichever loads first wins.
 
-## 14. Hosted checkouts and booking tools (Stripe, PayPal, Paddle, Lemon Squeezy, Gumroad, ThriveCart, SamCart, Calendly, Cal.com)
+## 14. Hosted checkouts, course platforms and booking tools
 
-The thank-you page often never runs your scripts. Use a checkout integration (signed webhook) and
-`update_container_settings {"decorate_checkouts": true}` so checkout/booking links carry the visitor ID.
+Stripe, PayPal, Paddle, Lemon Squeezy, Gumroad, ThriveCart, SamCart, Razorpay, Whop, ClickFunnels 2.0,
+systeme.io, Teachable, Kajabi, Calendly, Cal.com: the thank-you page often never runs your scripts. Use a
+checkout integration (webhook, also refunds and cancellations) and `update_container_settings
+{"decorate_checkouts": true}` (then publish) so checkout/booking links, embeds and form iframes carry the
+visitor ID. Server-created checkouts (Stripe sessions, PayPal orders, SSLCommerz, Razorpay) and gateways
+without webhooks (bKash, Nagad) need a few lines of server code: [visitor-id.md](visitor-id.md).
 Details: [integrations.md](integrations.md).
 
 ---
@@ -405,7 +424,7 @@ Details: [integrations.md](integrations.md).
 |---|---|
 | Theme/template code | Search the theme for `fbq(`, `ttq.`, `gtag(`, `snaptr(`, `pintrk(` |
 | WordPress plugins | Meta Pixel for WP, PixelYourSite, Facebook for WooCommerce, TikTok for WooCommerce, Site Kit |
-| Shopify | Facebook & Instagram / TikTok / Google channels; Customer events custom pixels |
+| Shopify | Facebook & Instagram / TikTok / Google & YouTube channel apps; other Customer events custom pixels (`inspect_site` → `existing_tags.shopify_pixels`) |
 | Wix / Squarespace | Built-in marketing integrations |
 | GTM | Pixel tags in the container |
 | GHL / ClickFunnels | Pixel ID fields and tracking-code boxes |
@@ -420,4 +439,5 @@ The TrackFlow Debugger lists pixel requests not linked to a TrackFlow event — 
    data present; deliveries `delivered`.
 4. Meta/TikTok Test Events with the destination's test code → "deduplicated" for browser + server.
    Remove test codes afterwards.
-5. Webhook purchases: `get_checkout_log` / `test_checkout_payload`.
+5. Webhook purchases: `get_checkout_log` / `test_checkout_payload` (check `matched_by`).
+6. Shopify: `get_site` → `shopify_pixel_detected: true`.

@@ -42,7 +42,40 @@ A destination that is not ready for the server is **not attempted** (it never tu
 Event: `pending` → `delivered` (all attempted destinations OK) / `partial` / `failed` / `blocked` (bot, reload, consent,
 blocking rule) / `browser_only` (only browser tags connected) / `no_destination`. Per-destination delivery: `ok`, `error`
 (read `response`), `skipped` (with reason — expected for one-sided events, unmapped events, missing click IDs, test events
-without a test field). No automatic retries (10 s timeout per call); `retry_event_delivery` re-sends manually.
+without a test field, events older than the platform accepts: "Too old for <Platform> (max N days)", lifecycle events
+while `send_lifecycle` is off). No automatic retries (10 s timeout per call); `retry_event_delivery` re-sends manually.
+Only exception: Google Ads value restatements are queued (`skipped` "Queued: …") and sent by an hourly sweep when due.
+
+### Refunds and cancellations (`send_lifecycle`)
+
+Every platform has the advanced checkbox `send_lifecycle` ("Send refunds and cancellations", **off by default**).
+On: lifecycle events from webhooks (`OrderRefunded`, `OrderCancelled`, `SubscriptionRenewed`, `SubscriptionCancelled`,
+`BookingCancelled`, `BookingNoShow`) are delivered: GA4 `refund`; Google Ads partial-refund restatement (full refunds
+not possible); custom events on Meta, TikTok, Reddit, OpenAI, Microsoft and the custom webhook; Outbrain/Taboola named
+conversions with a click id; LinkedIn, X, Spotify, Nextdoor only when mapped; never Snapchat, Pinterest, Quora,
+AppLovin. Set it only when the customer asks. Full table and per-platform max event ages:
+[lifecycle-events.md](lifecycle-events.md).
+
+### Which events a destination receives (`event_filter`, `event_list`)
+
+By default every destination receives every event. Each destination can instead receive a chosen set:
+
+| `event_filter` | Effect |
+|---|---|
+| `all` (default) | every event; a stored `event_list` is kept but ignored |
+| `only` | only the names in `event_list` (exact, case-sensitive; `only` with an empty list is rejected: "Pick at least one event or choose All events") |
+| `except` | every event except the names in `event_list` |
+
+`event_list`: up to 100 names, each ≤ 64 chars (trimmed, deduped). Example:
+`destinations {"action": "update_destination", "site_id": 12, "destination_id": 7, "config": {"event_filter": "only", "event_list": ["Purchase", "Lead"]}}`.
+
+- Applies to both paths: the browser pixel of that platform is not fired for an excluded event (t.js and the
+  Shopify Customer Events code), and the server delivery is `skipped` with reason
+  `Not in this destination's event list` (every origin: browser, webhook, CRM, offline, API, tests, retries).
+- The event itself is still recorded in TrackFlow and sent to the other destinations.
+- Lifecycle events (refunds, cancellations…) are not affected; they follow `send_lifecycle`.
+- Use it instead of deleting tags when the customer wants, for example, all funnel events on Meta but only
+  Purchase and Lead on TikTok.
 
 ### Test fields
 
@@ -169,7 +202,11 @@ for developer tokens that never uploaded before.
   browser-origin events with a label are left to the tag; server only uploads events the browser never saw (webhook,
   offline, CRM, API). `multi_source` (Google allowlist only) uploads to the tag's own action and Google merges by
   transaction ID (API value overrides, except during its 14-day trial).
-- **Skips:** no mapped action; no gclid/gbraid/wbraid, no user data and no IP.
+- **Skips:** no mapped action; no gclid/gbraid/wbraid, no user data and no IP; older than 90 days.
+- **Refunds (`send_lifecycle`):** a partial refund restates the uploaded Purchase (same transaction id and action) to
+  the remaining value, ≥ 24 h after the conversion (queued until then) and ≤ 54 days after it. Full refunds,
+  cancellations and chargebacks are skipped: the Data Manager API cannot retract conversions (that needs the Google
+  Ads API). Renewals etc. only when mapped under Conversion action IDs.
 - **Gotchas:** one label **and** one action ID per conversion action/event. Sign-in errors: `redirect_uri_mismatch`
   (add redirect URI), `invalid_client`, `unauthorized_client` (must be Web application), `access_denied` (add test user).
   **[vendor]** Enhanced conversions must be turned on in Google Ads conversion settings; EEA traffic needs Consent Mode v2 signals.
@@ -195,6 +232,9 @@ for developer tokens that never uploaded before.
 - **Dedup:** GA4 has none by event ID. **While the tag loads, the server skips every browser-origin event** ("Sent by the
   GA4 tag") and sends only webhook/offline/CRM/API events. Purchases share `transaction_id`, which GA4 dedupes.
   `browser` mode is a complete GA4 setup; `api_secret` matters only for server-originated events.
+- **Refunds (`send_lifecycle`):** refunds, cancellations and chargebacks → GA4 `refund` event with `transaction_id` =
+  order id and the refunded value (lowers that transaction's revenue); renewals and subscription/booking events →
+  custom events. Within 72 h.
 - **Gotchas:** server events > 72 h old are skipped. `/mp/collect` returns 2xx even for invalid payloads → test with
   `debug`. Don't retry delivered events. **[vendor]** user-provided data collection must be enabled in the property for
   user_data; mark events as key events in GA4 Admin; never send PII in params/URLs.

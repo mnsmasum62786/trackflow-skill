@@ -12,7 +12,7 @@ All tools are in the `install` group (`install {"action": "...", ...}`); per-ope
 | `add_domain` `{site_id, host}` | Register the subdomain; returns the ONE DNS record to create |
 | `verify_domain` `{site_id, host \| domain_id}` | Check DNS now; returns what is missing/wrong |
 | `domain_status` `{site_id, host?}` | Domains + statuses, stealth paths, global name, proxy prefix (proxy secret masked) |
-| `get_install_snippet` `{site_id, mode}` | `auto` \| `custom_domain` \| `proxy` \| `stealth` \| `standard` |
+| `get_install_snippet` `{site_id, mode}` | `auto` \| `custom_domain` \| `proxy` \| `stealth` \| `standard` \| `shopify_pixel` (Shopify Customer Events code; loads from the custom domain once it is active, so **re-copy it into Shopify after a domain goes live**) |
 | `get_proxy_config` `{site_id, platform}` | Ready-to-paste same-origin proxy config (contains the proxy secret) |
 | `update_first_party_settings` `{site_id, stealth?, global?, rotate_paths?, rotate_secret?}` | Stealth on/off, global name, path/secret rotation |
 | `remove_domain` `{site_id, host \| domain_id}` | Disconnect a domain (ask first) |
@@ -70,8 +70,8 @@ install {"action": "get_install_snippet", "site_id": 12, "mode": "auto"}
 Tell the customer: remove the old TrackFlow tag, paste this in its place inside `<head>` on every page.
 - The site key is built into the URL (no `data-site`).
 - **The JS global is the random name in `global`** (stealth is on by default). `window.trackflow` is not
-  defined. Every existing on-page call (`trackflow('track', …)`, theme/GTM snippets, Shopify cart
-  attribute snippet) must be changed to that name — or turn stealth off first
+  defined. Every existing on-page call (`trackflow('track', …)`, theme/GTM snippets) must be changed to
+  that name — or turn stealth off first
   (`update_first_party_settings {"stealth": false}`) and re-fetch the snippet to keep `trackflow`.
 - Leaving the old tag too is not double tracking (one copy per site key runs), but whichever loads
   first wins, possibly the blockable one. Remove it.
@@ -110,8 +110,9 @@ the dashboard, login and API are never reachable on it.
 
 ## 4. Stealth paths, global name and rotation (API/MCP only, not in the dashboard)
 
-Every site has a random path prefix and random file names (script, config, collect, plugins dir,
-extensions dir), visible in `domain_status.settings.paths`. The same paths work on the TrackFlow host
+Every site has a random path prefix and random file names (script, Shopify pixel loader, config,
+collect, plugins dir, extensions dir), visible in `domain_status.settings.paths` (`shopify_pixel` is the
+file the Shopify Customer Events code loads). The same paths work on the TrackFlow host
 (stealth), the custom domain and through a proxy. With stealth on, the served script has comments
 stripped and the API is under `settings.global`.
 
@@ -125,7 +126,7 @@ install {"action": "update_first_party_settings", "site_id": 12, "rotate_secret"
 | Change | Consequence |
 |---|---|
 | `stealth` / `global` | On-page code calling the old global breaks. `global` must be a plain identifier without tracking words (`track`, `pixel`, `analytic`, `collect`, `trackflow`). |
-| `rotate_paths` | Old paths stop working at once: the installed stealth/custom-domain/proxy snippet must be replaced immediately. Use when a filter list starts blocking the site's paths. |
+| `rotate_paths` | Old paths stop working at once: the installed stealth/custom-domain/proxy snippet (and a Shopify Customer Events code) must be replaced immediately. Use when a filter list starts blocking the site's paths. |
 | `rotate_secret` | Every installed proxy config must be updated (`get_proxy_config` again). |
 
 Ask before rotating on a live site.

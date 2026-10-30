@@ -60,7 +60,7 @@ Facts that matter:
 | `tag_manager` | get_tagging_reference, inspect_site, list_variables, create_variable, update_variable, delete_variable, list_tag_triggers, create_tag_trigger, update_tag_trigger, duplicate_tag_trigger, delete_tag_trigger, list_tags, create_tag, update_tag, delete_tag, list_recipes, apply_recipe, update_container_settings, get_container |
 | `publishing` | create_preview_link, list_preview_links, delete_preview_link, publish_version, list_versions, rollback |
 | `conversions` | get_conversion_events, set_conversion_events, delete_conversion_event, restore_conversion_event |
-| `integrations` | list_checkout_providers, list_checkout_integrations, create_checkout_integration, update_checkout_integration, delete_checkout_integration, test_checkout_payload, get_checkout_log, list_crm_providers, list_crm_integrations, create_crm_integration, update_crm_integration, delete_crm_integration, test_crm_payload, sync_crm_integration, get_crm_log, list_webhook_integrations, create_webhook_integration, update_webhook_integration, delete_webhook_integration, import_offline_conversions, list_offline_imports, list_offline_sources, create_offline_source, update_offline_source, sync_offline_source, delete_offline_source |
+| `integrations` | list_checkout_providers, list_checkout_integrations, create_checkout_integration, update_checkout_integration, delete_checkout_integration, test_checkout_payload, get_checkout_log, list_crm_providers, list_crm_integrations, create_crm_integration, update_crm_integration, delete_crm_integration, test_crm_payload, sync_crm_integration, get_crm_log, list_webhook_integrations, create_webhook_integration, update_webhook_integration, test_webhook_payload, delete_webhook_integration, import_offline_conversions, list_offline_imports, list_offline_sources, create_offline_source, update_offline_source, sync_offline_source, delete_offline_source |
 | `install` | get_install_snippet, get_proxy_config, domain_status, add_domain, verify_domain, remove_domain, update_first_party_settings, list_blocking_rules, create_blocking_rule, update_blocking_rule, delete_blocking_rule |
 | `account` | get_account, update_account, list_api_keys, create_api_key, revoke_api_key |
 
@@ -107,12 +107,12 @@ Types, enums, minimum/maximum are **not** validated by the MCP layer; the API va
 
 ## 3. Recommended call order
 
-1. `sites → list_sites` → pick `site_id` (or `create_site`). Check `last_seen_at`: empty = tag not installed → `install → get_install_snippet`.
+1. `sites → list_sites` → pick `site_id` (or `create_site`). Check `last_seen_at`: empty = tag not installed → `install → get_install_snippet` (Shopify: mode `shopify_pixel` for Customer Events).
 2. Turn on only the automatic tracking the customer asked for: `sites → update_site settings {auto_pageview | auto_forms | ecommerce_datalayer}` (all **off** on new sites).
 3. Understand the site: `tag_manager → inspect_site` (home, product, checkout, thank-you, contact pages), `get_tagging_reference`, `list_tags` / `list_tag_triggers` / `list_variables`.
 4. Build in the **draft**: `create_variable` → `create_tag_trigger` (or inline triggers) → `create_tag`, or `apply_recipe`.
 5. Connect platforms: `destinations → list_platforms` → `add_destination` → `test_destination` (Google Ads server uploads: `google_ads_sign_in_link`).
-6. Server-side sources if needed: `integrations → create_checkout_integration` / `create_crm_integration` / `create_webhook_integration` / `import_offline_conversions` / `create_offline_source`.
+6. Server-side sources if needed: `integrations → create_checkout_integration` / `create_crm_integration` / `create_webhook_integration` / `import_offline_conversions` / `create_offline_source`. Refunds and cancellations from them reach a destination only after `update_destination config.send_lifecycle: true` (only when the customer asks).
 7. Test: `publishing → create_preview_link` → customer opens it → `reports → list_events {test: "only"}` → `get_event`.
 8. Publish when the customer wants it live: `publishing → publish_version` (never if they said they want to review first; then hand over the preview URL).
 9. Verify live: `reports → list_events` / `get_event` / `get_event_flow`; fix credentials → `retry_event_delivery`.
@@ -124,7 +124,7 @@ Types, enums, minimum/maximum are **not** validated by the MCP layer; the API va
 
 | Class | Actions |
 |---|---|
-| **Read-only** (no changes) | list_sites, get_site, get_overview, get_event_flow, list_events, get_event, get_attribution, list_journeys, get_journey, get_match_quality, list_platforms, list_destinations, get_tagging_reference, inspect_site (fetches a page of the customer's site), list_variables, list_tag_triggers, list_tags, list_recipes, get_container, list_preview_links, list_versions, get_conversion_events, all list_*/get_*_log in integrations, list_checkout_providers, list_crm_providers, test_checkout_payload, test_crm_payload, import_offline_conversions with `dry_run: true`, get_install_snippet, get_proxy_config, domain_status, list_blocking_rules, get_account, list_api_keys |
+| **Read-only** (no changes) | list_sites, get_site, get_overview, get_event_flow, list_events, get_event, get_attribution, list_journeys, get_journey, get_match_quality, list_platforms, list_destinations, get_tagging_reference, inspect_site (fetches a page of the customer's site), list_variables, list_tag_triggers, list_tags, list_recipes, get_container, list_preview_links, list_versions, get_conversion_events, all list_*/get_*_log in integrations, list_checkout_providers, list_crm_providers, test_checkout_payload, test_crm_payload, test_webhook_payload, import_offline_conversions with `dry_run: true`, get_install_snippet, get_proxy_config, domain_status, list_blocking_rules, get_account, list_api_keys |
 | **Draft-only writes** (nothing changes on the site until `publish_version`) | create/update/delete_variable, create/update/duplicate/delete_tag_trigger, create/update/delete_tag, apply_recipe, update_container_settings |
 | **Preview only** | create_preview_link (draft runs only in the browser that opens the link; events flagged test) |
 | **Live immediately — website tracking** | publish_version, rollback, update_site (settings reach visitors within ~a couple of minutes), add/update/remove_destination (browser tags load / stop loading on next page view), update_first_party_settings (`rotate_paths` breaks the installed stealth/custom-domain snippet; `stealth`/`global` change the JS global name), remove_domain, delete_preview_link, create/update/delete_blocking_rule |
@@ -144,7 +144,7 @@ Returns `{sites: [{id, name, domain, site_key, platform, settings{…}, last_see
 
 ### get_site
 Params: `site_id`* (integer).
-Returns `{site}` with all settings: `consent_mode, auto_pageview, auto_forms, ecommerce_datalayer, block_bots, block_reloads, dedup, cross_domains, conversion_events, allow_custom_js`, `site_key`, `last_seen_at`.
+Returns `{site}` with all settings: `consent_mode, auto_pageview, auto_forms, ecommerce_datalayer, block_bots, block_reloads, dedup, cross_domains, conversion_events, allow_custom_js`, `site_key`, `last_seen_at`, `shopify_pixel_seen_at` and `shopify_pixel_detected` (true once the Shopify Customer Events code from `get_install_snippet` mode `shopify_pixel` has sent events from at least 3 different visitors within the last 14 days; the theme tag then leaves the events that code sends to it).
 Error: `Site <id> not found. Use list_sites.`
 
 ### create_site
@@ -203,7 +203,7 @@ Shared params: `site_id`*; window `days` / `from` + `to` (see Conventions); `con
 
 ### get_overview
 Params: `days` (default 7), `from`, `to`, `conv`.
-Returns `site, conv, range{from,to,days,custom}, totals{events, sessions, visitors, conversions, revenue, delivered, failed, partial, blocked, undelivered, match}, prev{…previous period}, bucket, series[], top_conversions[], top_sources[], recent_events[], recent_conversions[], destinations[{id,type,pixel_id,enabled,has_token,mode,ready}]`. Business numbers exclude blocked and test events; status counts include everything.
+Returns `site, conv, range{from,to,days,custom}, totals{events, sessions, visitors, conversions, revenue, refunds, net_revenue, cancelled_orders, delivered, failed, partial, blocked, undelivered, match}, prev{…previous period}, bucket, series[], top_conversions[], top_sources[], recent_events[], recent_conversions[], destinations[{id,type,pixel_id,enabled,has_token,mode,ready}]`. Business numbers exclude blocked and test events; status counts include everything. `refunds` = refunded amounts + cancelled order values of orders whose Purchase counted; `net_revenue` = revenue − refunds; `cancelled_orders` = distinct orders cancelled or charged back ([lifecycle-events.md](lifecycle-events.md)).
 
 ### get_event_flow
 Params: `days` (default 7), `from`, `to` (both needed).
@@ -227,14 +227,14 @@ Status meanings: `pending` delivery running; `delivered` all server destinations
 
 ### get_event
 Params: `site_id`*, `event_row_id`* = the numeric `id` from list_events (**not** the `event_id` string).
-Returns `{event: {…, user_data (hashed), custom_data, click_ids}, deliveries: [{id, type, status, http_status, payload, response, created_at}]}` — the exact payload and platform response per destination. Delivery `status`: `ok`, `error`, `skipped` (e.g. test event on a destination without test mode).
+Returns `{event: {…, user_data (hashed), custom_data, click_ids}, deliveries: [{id, type, status, http_status, payload, response, created_at}]}` — the exact payload and platform response per destination. Delivery `status`: `ok`, `error`, `skipped` with the reason in `response` (e.g. test event on a destination without test mode, "Too old for <Platform> (max N days)", "Refunds and cancellations are off for this destination", Google Ads "Queued: … sending after <time>" — a queued delivery gets a second row when it is sent).
 
 ### retry_event_delivery
 Params: `site_id`*, `event_row_id`*. Re-sends the stored event to every enabled destination with current settings; returns `{ok, status}`. **Live send** (a test event stays a test event). Blocked events: `Event cannot be resent (HTTP 400)`.
 
 ### get_attribution
 Params: `days` (default 30), `from`, `to`, `model` (`last` default | `first`), `conv`.
-Returns `{model, conv, sources[{source, sessions, visitors, conversions, revenue}], campaigns[] (top 20), by_event[], devices[], landing[] (top 10)}`. Excludes blocked and test events.
+Returns `{model, conv, totals{revenue, refunds, net_revenue, cancelled_orders}, sources[{source, sessions, visitors, conversions, revenue, refunds, net_revenue, cancelled_orders}], campaigns[] (top 20, same extra fields), by_event[], devices[], landing[] (top 10)}`. Refunds and cancellations are attributed to the source/campaign of the order's Purchase. Excludes blocked and test events.
 
 ### list_journeys
 Params: `days` (default 30), `from`, `to`, `all` (boolean: include non-converters), `conv`.
@@ -262,7 +262,7 @@ Platform ids (from `list_platforms`): `applovin, ga4, google_ads, linkedin, meta
 Modes: `both` (browser tag + server API, recommended), `browser` (tag only, no server secret), `server` (server API only, no tag). Field `need` levels: `always`; `browser` (needed in both|browser); `server` (needed in both|server); `null` = optional (see its `why`). Only ask the customer for the fields the chosen mode needs.
 
 ### list_platforms
-Params: none. Returns `{platforms: [{id, name, category, docs, browser_tag, server_api, modes, default_mode, dedup{key, note}, google_sign_in?{available, redirect_uri, note}, fields: [{key, label, need, required, section, why?, secret, browser, help, placeholder, filled_by_sign_in?, options?, type?}]}]}`.
+Params: none. Returns `{platforms: [{id, name, category, docs, browser_tag, server_api, modes, default_mode, dedup{key, note}, google_sign_in?{available, redirect_uri, note}, fields: [{key, label, need, required, section, why?, secret, browser, help, placeholder, filled_by_sign_in?, options?, type?}]}]}`. Every platform has the advanced checkbox `send_lifecycle` ("Send refunds and cancellations", default false); its `why` says exactly what that platform receives ([lifecycle-events.md](lifecycle-events.md)).
 
 ### list_destinations
 Params: `site_id`*. Returns `{destinations: [{id, site_id, type, name, pixel_id, config (secrets masked), access_token (masked), has_token, test_event_code, mode, missing[labels], missing_keys[], ready, load_browser_pixel, enabled, browser, server, created_at}]}`.
@@ -280,10 +280,11 @@ Params: `site_id`*. Returns `{destinations: [{id, site_id, type, name, pixel_id,
 Returns `{destination, next_step}`. `next_step` examples: `Ready. Run test_destination to prove the server credentials work.`; `Saved, but not ready: missing … for mode "both". Send the customer the google_ads_sign_in_link to connect Google.`; `Browser-only: TrackFlow loads the tag; nothing is sent server-side…`.
 Errors: missing fields → API message plus `Ask the customer for: <Label> → config.<key> (<help>); … Their modes: both, browser, server.`; bad mode → `<Platform>: mode must be "both" or "browser" or "server".`; unknown type → `Unknown platform. Choose one of: …`.
 Live effect: browser tag loads on the next page view (modes both|browser); server delivery starts for the next event.
+`config.send_lifecycle` (refunds, cancellations, renewals, no-shows) stays off unless the customer asks for it.
 
 ### update_destination
 Params: `site_id`*, `destination_id`*, `config`, `mode`, `enabled`, `load_browser_pixel`.
-Rules: only config keys passed change; omit a secret or pass `""` to **keep** the saved secret; `""` on a non-secret field clears it; `null` on a secret deletes it (`refresh_token: null` disconnects Google sign-in). Switching `mode` requires that mode's fields. Error `Destination <id> not found on site <site>. Use list_destinations.`
+Rules: only config keys passed change; omit a secret or pass `""` to **keep** the saved secret; `""` on a non-secret field clears it; `null` on a secret deletes it (`refresh_token: null` disconnects Google sign-in). Switching `mode` requires that mode's fields. `config.event_filter` (`all` | `only` | `except`) + `config.event_list` (event names) choose which events this destination receives, on both the browser pixel and server delivery (excluded server deliveries are skipped with `Not in this destination's event list`; `only` with an empty list is rejected; lifecycle events are not filtered). `config.send_lifecycle: true/false` switches sending lifecycle events on/off (live at once; changes what the platform reports and optimises on, so only on the customer's request). Error `Destination <id> not found on site <site>. Use list_destinations.`
 
 ### test_destination
 Params: `site_id`*, `destination_id` (optional: only report this one), `event_name` (default `Lead`), `value` (USD).
@@ -308,7 +309,8 @@ Params: none. Returns the vocabulary: `variable_types`, `variable_common_fields`
 
 ### inspect_site
 Params: `site_id`*, `url` (page on the site; default home page).
-Fetches the page server-side and returns `{status, url, title, platform[], existing_tags{gtm, ga4, meta_pixel, tiktok_pixel, trackflow}, forms[{selector, id, action, method, builder, kind (search|newsletter|login|add_to_cart|checkout|lead), external, fields[], submit_text}], embedded_forms[], ctas[{tag, text, href, selector, provider}], json_ld_types, json_ld_product, meta, microdata_price, datalayer{pushes, events, gtag_events, ecommerce}, checkout_links[{provider, href}], iframes[], videos, suggestions[]}`.
+Fetches the page server-side and returns `{status, url, title, platform[], existing_tags{gtm, ga4, meta_pixel, tiktok_pixel, trackflow, google_ads?, shopify_pixels?{meta, tiktok, custom_pixels}}, forms[{selector, id, action, method, builder, kind (search|newsletter|login|add_to_cart|checkout|lead), external, fields[], submit_text}], embedded_forms[], ctas[{tag, text, href, selector, provider}], json_ld_types, json_ld_product, meta, microdata_price, datalayer{pushes, events, gtag_events, ecommerce}, checkout_links[{provider, href}], iframes[], videos, suggestions[]}`.
+On Shopify pages `shopify_pixels` lists the Meta pixel ids, TikTok pixel codes and the number of custom pixels found in the store's web-pixel config (channel apps), and `suggestions` recommend the Customer Events code and warn about those duplicates.
 Limits: only the site's domain, its subdomains and `cross_domains`; http(s) only; private IPs refused; 12 s timeout, max 5 redirects, 3 MB. Server-rendered HTML only (content injected by JavaScript is not seen). Errors: `Only pages on example.com (or its subdomains / cross-domain list) can be inspected.`, `The page returned HTTP 404`.
 
 ### Variables
@@ -373,7 +375,11 @@ Example (form lead with match-quality data):
 Options: **ecommerce** — `currency` (fallback, default USD), `add_to_cart_selector`, `price_selector`, `product_path_regex`, `checkout_path_regex`, `thank_you_path_regex`, `total_selector`, `thank_you_total_selector`, `order_id_selector`, `place_order_selector` (ViewContent, AddToCart, InitiateCheckout, Purchase with `event_id purchase_<order id>`). **lead_form** — `event_name` (default Lead), `form_selector`, `exclude_regex`, `wait_for`, `success_selector`, `success_text`. **booking** — `event_name` (default Schedule); Calendly/Cal.com embeds, also turns on checkout decoration for `calendly, cal`. **newsletter** — `event_name` (default Lead), `form_selector`.
 
 ### update_container_settings
-Params: `site_id`*, `decorate_checkouts`: `true`, `false`, or a list of `stripe, paypal, lemonsqueezy, gumroad, thrivecart, samcart, paddle, calendly, cal, hidden_input`. Appends the TrackFlow visitor id to third-party checkout/booking links so their webhooks match the ad click. Draft setting → needs `publish_version`.
+Params: `site_id`*, and any of:
+- `decorate_checkouts`: `true`, `false`, or a list of `stripe, paypal, lemonsqueezy, gumroad, thrivecart, samcart, paddle, calendly, cal, typeform, jotform, tally, hubspot, zoho, gohighlevel, hidden_input`. Appends the TrackFlow visitor id to third-party checkout/booking/form links, embeds (Stripe Buy Button / Pricing Table `client-reference-id`, Typeform `data-tf-hidden`, Calendly inline widget) and iframes so their webhooks match the ad click.
+- `decorate_reload_iframes`: boolean (default false). True also rewrites provider iframes that had already loaded (reloads them); otherwise only iframes added later / lazy `data-src` are decorated.
+- `shopify_events`: extra Shopify Customer Events: `true` (all of `ViewCategory, ViewCart, AddShippingInfo`), a list of some, or `false`/`null` (none). The funnel events follow `ecommerce_datalayer` / published tags.
+Draft settings → need `publish_version`.
 
 ### get_container
 Params: `site_id`*, `which` (`draft` default | `published`). Draft returns `{which, container{vars, tags, settings}, published_version, unpublished_changes, has_custom_js, allow_custom_js}`. Use `unpublished_changes` to know whether a publish is pending.
@@ -401,8 +407,8 @@ Never changes what platforms receive. Standard names: `Purchase, Lead, CompleteR
 
 | Action | Params | Notes |
 |---|---|---|
-| `get_conversion_events` | `site_id`* | `{selected, events[{name, conversion, standard, count, count_30d, last_at}], hidden, destinations[{id, type, name, pixel_id, enabled, selectable, note, selected, events[{name, conversion, sent, failed, skipped, last_at, configured}]}]}` |
-| `set_conversion_events` | `site_id`*, `events`* (full list, ≤200 names, each ≤64), `destination_id` | Without `destination_id`: replaces the site list and **re-marks past events**. With it: that destination's list (reports with `conv=<id>`). Google Ads is not selectable: `Google Ads decides which conversions count (Primary or Secondary)…`. Returns the list plus `changed` |
+| `get_conversion_events` | `site_id`* | `{selected, events[{name, conversion, standard, count, count_30d, last_at}], hidden, lifecycle_events[{name, count, count_30d, last_at}] (never conversions), destinations[{id, type, name, pixel_id, enabled, selectable, note, selected, events[{name, conversion, sent, failed, skipped, last_at, configured}]}]}` |
+| `set_conversion_events` | `site_id`*, `events`* (full list, ≤200 names, each ≤64), `destination_id` | Without `destination_id`: replaces the site list and **re-marks past events**. With it: that destination's list (reports with `conv=<id>`). Google Ads is not selectable: `Google Ads decides which conversions count (Primary or Secondary)…`. Lifecycle names (`OrderRefunded`, `OrderCancelled`, `SubscriptionRenewed`, `SubscriptionCancelled`, `BookingCancelled`, `BookingNoShow`) are dropped and returned in `ignored` + `note`. Returns the list plus `changed` |
 | `delete_conversion_event` | `site_id`*, `name`* | Custom names only (`<name> is a standard event and cannot be deleted. Switch it off instead.`). Removes from every list and hides it |
 | `restore_conversion_event` | `site_id`*, `name`* | Un-hides; does not re-add to any list |
 
@@ -412,21 +418,21 @@ Never changes what platforms receive. Standard names: `Purchase, Lead, CompleteR
 
 Common: create/update return the item with a `webhook_url` to give the customer; secrets are masked (`has_secret`, `has_api_key`/`has_api_token` booleans). For checkout and CRM updates, **omitting** `secret`/`api_key`/`api_token` (or sending back the masked value) keeps the saved one; sending `""` **clears** it (for a checkout integration that switches signature verification off), even though the tool text says "blank keeps". `config`, when passed, replaces the saved config as a whole, so send the full object. `integration_id` comes from the matching list action. These schemas are open (extra keys are forwarded and mostly ignored).
 
-### Checkout webhooks (verified, order dedup)
-Providers: `stripe, paypal, shopify, lemonsqueezy, paddle, gumroad, thrivecart, samcart, woocommerce, calendly`.
+### Checkout webhooks (verified, order dedup, lifecycle)
+Providers: `stripe, paypal, shopify, lemonsqueezy, paddle, gumroad, thrivecart, samcart, woocommerce, calendly, razorpay, clickfunnels, systeme, teachable, kajabi, whop`. Per-provider secrets, events and passthrough: [integrations.md](integrations.md) §2.
 
 | Action | Params | Notes |
 |---|---|---|
-| `list_checkout_providers` | none | `{providers:[{id, name, docs, secret_label, api_label, events, passthrough}]}` — read first |
-| `list_checkout_integrations` | `site_id`* | Items with `webhook_url, signature_verification (on\|off), received, events_created, last_received_at, last_error, passthrough, events` |
-| `create_checkout_integration` | `site_id`*, `provider`*, `name`, `secret`, `api_key`, `config` | Webhook URL is **live at once**. For providers that issue the secret only after the webhook exists (Stripe, Shopify…): create, give URL, then add `secret` via update |
-| `update_checkout_integration` | `site_id`*, `integration_id`*, `name`, `secret`, `api_key`, `config`, `enabled` | |
+| `list_checkout_providers` | none | `{purchase_on:[…], providers:[{id, name, docs, secret_label, api_label, signed, events, purchase_stages, passthrough}]}` — read first; tell the customer to select exactly `events` |
+| `list_checkout_integrations` | `site_id`* | Items with `webhook_url, purchase_on, signature_verification (on \| off \| secret check \| not verified (secret URL only)), received, events_created, last_received_at, last_error, passthrough, events, purchase_stages` |
+| `create_checkout_integration` | `site_id`*, `provider`*, `name`, `secret`, `api_key`, `config` | Webhook URL is **live at once**. For providers that issue the secret only after the webhook exists (Stripe, Shopify…): create, give URL, then add `secret` via update. Unsigned SamCart/Teachable/Kajabi: optional shared secret that the URL must carry as `?secret=` |
+| `update_checkout_integration` | `site_id`*, `integration_id`*, `name`, `secret`, `api_key`, `config`, `enabled` | `config` replaces the saved one: send the full object (e.g. `{"purchase_on":"created_cod", …}`) |
 | `delete_checkout_integration` | `site_id`*, `integration_id`* | URL stops working. Ask first |
-| `test_checkout_payload` | `site_id`*, `integration_id`*, `payload`* (object), `headers` (e.g. `{"x-shopify-topic":"orders/create"}`) | Dry run: no signature check, nothing stored. `{results:[{status: would_create\|ignored\|duplicate, order_id, event_name, event_id, value, currency, vid, matched_by, action_source, identifiers, click_ids, reason?}]}` |
-| `get_checkout_log` | `site_id`*, `integration_id`* | Last 100 deliveries: `ok, ignored, duplicate, rejected, error` with details |
+| `test_checkout_payload` | `site_id`*, `integration_id`*, `payload`* (object), `headers` (topic headers: `{"x-shopify-topic":"refunds/create"}`, `{"x-wc-webhook-topic":"order.updated"}`, `{"x-webhook-event":"SALE_NEW"}` for systeme.io) | Dry run: no signature check, nothing stored. `{results:[{status: would_create\|would_skip\|ignored\|duplicate, order_id, event_name, event_id, lifecycle?, value, currency, partial?, remaining_value?, original_value?, vid, matched_by (vid\|order\|provider_ref\|email\|phone\|landing_url\|none), action_source, identifiers, click_ids, event_time, purchase_on?, reason?}]}`: one result per event (Purchase or lifecycle) |
+| `get_checkout_log` | `site_id`*, `integration_id`* | Last 100 deliveries: `ok, ignored, duplicate, rejected, error` with `verified`, `delivery_id`, an `events` summary and per-event results (incl. lifecycle events, visitor match, provider redeliveries) |
 
-`config` keys used: `event_name` (default Purchase; Calendly Schedule), `accept_test` (track test-mode payments), `order_id_field`, `default_currency`, `default_country`, `value_divisor`, `value`, `renewals`, `renewal_event_name`, `subscription_event_name`, `paid_statuses`, `payment_intents`, `sandbox`, `vid_field`.
-Behaviour: event id `purchase_<order id>` (other event names: `<lowercased name>_<order id>`; Calendly `calendly_<invitee uuid>`) — the same id the dataLayer bridge uses on the thank-you page, so browser + webhook count once. **Without a `secret` signature verification is off** and any POST is accepted. Orders with no visitor id, email, phone, IP or click id are ignored. Test-mode payments are ignored unless `accept_test: true`.
+`config` keys used: `purchase_on` (`paid` default \| `created` = payment authorized or paid \| `completed` = fulfilled/completed \| `created_cod` = at order creation even unpaid; other values rejected), `event_name` (default Purchase; Calendly Schedule), `accept_test` (track test-mode payments), `order_id_field`, `default_currency`, `default_country`, `value_divisor`, `value`, `renewals` + `renewal_event_name` (legacy Stripe renewals as a conversion event), `subscription_event_name`, `paid_statuses`, `payment_intents`, `track_invoice_payments` (Razorpay), `sandbox`, `event_types` (SamCart), `vid_field`.
+Behaviour: event id `purchase_<order id>` (other event names: `<lowercased name>_<order id>`; Calendly `calendly_<invitee uuid>`) — the same id the dataLayer bridge, the thank-you tag and the Shopify Customer Events code use, so browser + webhook count once. Purchase `event_time` = time of the `purchase_on` stage. Refunds, cancellations, chargebacks, renewals, subscription cancellations and booking cancellations/no-shows become `OrderRefunded` / `OrderCancelled` / `SubscriptionRenewed` / `SubscriptionCancelled` / `BookingCancelled` / `BookingNoShow` (never conversions; delivered only to destinations with `send_lifecycle`; [lifecycle-events.md](lifecycle-events.md)). **Without a `secret` signature verification is off** and any POST is accepted. Orders with no visitor id, email, phone, IP or click id are ignored. Test-mode payments are ignored unless `accept_test: true`.
 
 ### CRM integrations
 Providers: `hubspot, gohighlevel, pipedrive, salesforce, zoho, generic`.
@@ -446,17 +452,19 @@ Providers: `hubspot, gohighlevel, pipedrive, salesforce, zoho, generic`.
 Default stage map (all providers): `won`/`closedwon` → Purchase with value; `qualified`/`qualifiedlead`/`qualification` → QualifiedLead. HubSpot adds `qualifiedtobuy`, `salesqualifiedlead`, `marketingqualifiedlead` → QualifiedLead, `appointmentscheduled` → Schedule.
 Behaviour: event id `crm_<integration id>_<object id>_<stage>`; a record without email, phone, external id, Meta lead id or visitor id is ignored. Meta lead ids found in the payload are sent for Conversions API for CRM. Polling starts from the integration's creation time (older deals only with `backfill_days`).
 
-### Simple mapped webhooks (no signature check)
-Providers (label only): `stripe, calendly, typeform, shopify, woocommerce, cal, tally, generic`.
+### Mapped ("custom") webhooks
+Providers (label only, except `cal`): `stripe, calendly, typeform, shopify, woocommerce, cal, tally, generic`.
 
 | Action | Params | Notes |
 |---|---|---|
-| `list_webhook_integrations` | `site_id`* | Items with `webhook_url`, `received`, `last_received_at` |
-| `create_webhook_integration` | `site_id`*, `event_name`*, `provider` (default generic), `name`, `mapping`, `enabled` | Closed schema. Every accepted POST becomes `event_name` |
-| `update_webhook_integration` | `site_id`*, `integration_id`*, same fields | `mapping` replaced as a whole; URL unchanged |
+| `list_webhook_integrations` | `site_id`* | Items with `webhook_url`, `received`, `last_received_at`, `signature` (scheme), `secret` (masked) / `secret_set`, `verified` (false = anyone with the URL can post), `warnings` |
+| `create_webhook_integration` | `site_id`*, `event_name`*, `provider` (default generic), `name`, `mapping`, `signature`, `secret`, `enabled` | Closed schema. Accepted POSTs become `event_name` (or a lifecycle event via `status_map`). 400 when a Purchase webhook has no `mapping.order_id_path`. Relay `warnings` |
+| `update_webhook_integration` | `site_id`*, `integration_id`*, same fields | `mapping` and `signature` replaced as a whole; `secret` omitted keeps, `""` removes; URL unchanged |
+| `test_webhook_payload` | `site_id`*, `integration_id`*, `payload`* (object, or the raw JSON string to check an HMAC), `headers`, `mapping` (try an unsaved mapping) | Dry run: `{signature{ok, verified, scheme, reason}, ignored?, reason?, events[{kind, status, event_name, event_id, event_time, vid, matched_by, custom_data, user_data_keys, click_ids, url, conversion, duplicate?, would}], note}`. Nothing stored or sent |
 | `delete_webhook_integration` | `site_id`*, `integration_id`* | URL returns 404 afterwards |
 
-`mapping` (closed object, all optional dot paths): `email_path, phone_path, name_path, first_name_path, last_name_path, value_path, value_divisor (number, 100 for cents), currency_path, default_currency, event_id_path, event_id_prefix, visitor_path, url_path, fbc_path, fbp_path, filter_path, filter_value`. **Set `event_id_path`**: without it every retry creates a new event. Prefer checkout integrations for payment providers and CRM integrations for CRMs.
+`mapping` (closed object, all optional dot paths): `email_path, phone_path, name_path, first_name_path, last_name_path, value_path, value_divisor (number, 100 for cents), currency_path, default_currency, order_id_path, event_id_path, event_id_prefix, status_path, status_map, refund_amount_path, refund_id_path, vid_path (= visitor_path), landing_url_path, time_path, url_path, fbc_path, fbp_path, filter_path, filter_value`. **`order_id_path` is required** for new Purchase webhooks and whenever `status_path` / `status_map` / `refund_amount_path` is used (event ids `purchase_<order id>`, `refund_<order id>_…`, `cancel_<order id>`). `status_map` values: `purchase, refund, cancel, chargeback, ignore` (needs `status_path`). `provider: "cal"` turns Cal.com `BOOKING_CANCELLED` / `BOOKING_NO_SHOW_UPDATED` into `BookingCancelled` / `BookingNoShow`.
+`signature`: `{scheme: trackflow (default) | hmac | header_secret | basic | none, header, algorithm (sha256|sha1), encoding (hex|base64), signed (body | timestamp.body), timestamp_header, prefix}`; `hmac`, `header_secret`, `basic` need a `secret` (8–200 chars). Details: [integrations.md](integrations.md) §5. Prefer checkout integrations for payment providers and CRM integrations for CRMs.
 
 ### Offline conversions
 | Action | Params | Notes |
@@ -478,7 +486,7 @@ Validation: needs an identifier (email, phone, external id, lead id, visitor id 
 
 | Action | Params | Notes |
 |---|---|---|
-| `get_install_snippet` | `site_id`*, `mode` (`auto` default, `custom_domain`, `proxy`, `stealth`, `standard`) | `{mode, src, global, html, notes[]}`. `html` = the exact code for `<head>`. `auto` = custom domain if active, else stealth path. With stealth on the JS API is `window.<global>(…)` and `window.trackflow` is not defined |
+| `get_install_snippet` | `site_id`*, `mode` (`auto` default, `custom_domain`, `proxy`, `stealth`, `standard`, `shopify_pixel`) | `{mode, src, global, html, notes[]}`. `html` = the exact code for `<head>`. `auto` = custom domain if active, else stealth path. With stealth on the JS API is `window.<global>(…)` and `window.trackflow` is not defined. `shopify_pixel` returns `{mode, src, code, notes}`: `code` is plain JavaScript for Shopify admin → Settings → Customer events → Add custom pixel (loads from the custom domain when live; re-copy after adding one). The notes say which settings it currently sends |
 | `get_proxy_config` | `site_id`*, `platform`* (`nginx, apache, cloudflare, vercel, nextjs, netlify, wordpress`) | Ready-to-install same-origin proxy config (contains the per-site proxy secret: hand it over as a whole, do not quote the secret alone) |
 | `domain_status` | `site_id`*, `host` (optional filter) | `{settings{stealth, global, path_prefix, paths, proxy_secret (masked), cookies}, dns_target, domains[{id, host, status, cookie_domain, verified_via, dns, records, alternative_records, cert_expires_at, last_error, message}], edge, tracker}` |
 | `add_domain` | `site_id`*, `host`* (subdomain of the site domain, e.g. `data.example.com`) | Returns the ONE CNAME record to create (Cloudflare: DNS only / grey cloud); `alternative_records` (A + TXT) only if CNAME is impossible. Max 5 per site. Errors: `Use a subdomain of example.com …`, `Use a dedicated subdomain such as data.example.com, not the site itself`, `This hostname is already connected (409)` |
@@ -528,4 +536,10 @@ Domain flow for ad-blocker resistance: `add_domain` → customer creates the CNA
 | `A variable/trigger named "x" already exists; update it instead.` (409) | Use the update action |
 | `Preview links only work on example.com (and its subdomains or cross-domains).` | Preview URL must be on the site |
 | `Webhook integration not found on this site. List them first to get a valid id.` | Wrong integration id |
+| `mapping.order_id_path is required for purchase, refund and cancellation webhooks…` | Map the order id (e.g. `"order.id"`) |
+| `mapping.status_map needs mapping.status_path…` / `status_map values must be purchase, refund, cancel, chargeback or ignore` | Fix the status mapping |
+| `The hmac signature scheme needs a secret…` / `signature.header is required for hmac…` | Pass `secret` and the header the app signs in |
+| `config.purchase_on must be one of: paid, created, completed, created_cod` | Checkout integration config |
+| deliveries `skipped` "Refunds and cancellations are off for this destination" | Expected while `send_lifecycle` is off; turn on only on request |
+| deliveries `skipped` "Too old for <Platform> (max N days)" | Event older than the platform accepts; nothing to fix for that event |
 | HTTP 401 on `/mcp` | Missing/revoked key or expired OAuth connection: reconnect |

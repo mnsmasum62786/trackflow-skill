@@ -44,7 +44,7 @@ presets, operators, action types, container settings, recipes). Read it once per
 | Variable | `name`, `type`, type fields, `transform`, `default`, `fallback`, `notes` | Name `^[A-Za-z_][A-Za-z0-9_]{0,63}$`, unique per site, may not equal a built-in name. Unknown fields are rejected. |
 | Trigger | `name` (1–120, unique per site), `trigger` = `{type, …fields}`, `notes` | Reusable; one trigger can fire many tags. Returned with `used_by` (tags using it). Cannot be deleted while used (409). |
 | Tag | `name` (≤120), `trigger`, `conditions`, `actions`, `once`, `enabled`, `priority`, `notes` | `actions` must be a non-empty array. Disabled tags are not served. Higher `priority` runs first. |
-| Container settings | `decorate_checkouts` | Part of the draft: **needs `publish_version`** like any tag change. |
+| Container settings | `decorate_checkouts`, `decorate_reload_iframes`, `shopify_events` | Part of the draft: **needs `publish_version`** like any tag change. |
 | Version | `version`, `notes`, `live`, `tags`, `variables`, `has_custom_js`, `via` (`dashboard` / `api` / `system`), `created_at` | Every publish/rollback creates a new numbered version. `list_versions` shows the newest 100. |
 
 ### Tag `trigger` field
@@ -259,14 +259,15 @@ Canonical `custom_data` keys: `value`, `currency`, `content_ids`, `contents[{id,
 
 ---
 
-## 7. Container settings: checkout link decoration
+## 7. Container settings: checkout, form and embed decoration; Shopify extras
 
 `update_container_settings {"site_id": N, "decorate_checkouts": true | false | [providers]}` appends the
-TrackFlow visitor id to third-party checkout/booking links so their webhooks can be tied to the ad click.
+TrackFlow visitor id to third-party checkout/booking/form links, embeds and iframes so their webhooks can
+be tied to the ad click ([visitor-id.md](visitor-id.md)).
 
 | Provider | Added |
 |---|---|
-| `stripe` | Payment Links (`buy.stripe.com`): `client_reference_id=<vid>`; Stripe.js `redirectToCheckout` gets `clientReferenceId` |
+| `stripe` | Payment Links (`buy.stripe.com`): `client_reference_id=<vid>`; Buy Button / Pricing Table embeds (`<stripe-buy-button>`, `<stripe-pricing-table>`): `client-reference-id` attribute; Stripe.js `redirectToCheckout` gets `clientReferenceId` |
 | `paypal` | PayPal Standard (`cgi-bin/webscr`, donate): `custom=<vid>`; PayPal forms get hidden `custom` |
 | `lemonsqueezy` | `checkout[custom][tf_vid]=<vid>` |
 | `gumroad` | `tf_vid=<vid>` |
@@ -275,11 +276,26 @@ TrackFlow visitor id to third-party checkout/booking links so their webhooks can
 | `paddle` | Billing `Paddle.Checkout.open` `customData.tf_vid`; Classic `passthrough=<vid>` |
 | `calendly` | `utm_content=<vid>` on links, inline widgets and `Calendly.init*` |
 | `cal` | `metadata[tf_vid]=<vid>` |
+| `typeform` | Hidden field `tf_vid` (URL hash on `/to/` links, `data-tf-hidden` on embeds): add a hidden field named `tf_vid` in the form |
+| `jotform` | `tf_vid=<vid>` on links/iframes (prefills a hidden field named `tf_vid`) |
+| `tally` | `tf_vid=<vid>` on `/r/` and `/embed/` links/iframes (hidden field `tf_vid`) |
+| `hubspot` | `tf_vid=<vid>` on `hsforms.com` links/iframes (hidden property `tf_vid`) |
+| `zoho` | `tf_vid=<vid>` on Zoho Forms links/iframes (hidden field `tf_vid`) |
+| `gohighlevel` | `tf_vid=<vid>` on GoHighLevel / LeadConnector form, survey, quiz and booking widgets (hidden/custom field `tf_vid`) |
 | `hidden_input` | Forms posting to another domain get `<input type=hidden name="tf_vid">` |
 
-Never overwrites an existing value; only after consent. **It is a draft setting: publish to apply.**
-The engine (and therefore decoration) only loads when the published container has at least one enabled
-tag. For custom flows the site can call `trackflow('decorate', url)` / `trackflow('vid')`.
+Never overwrites an existing value; only after consent. Content added later (SPA views, popups,
+JS-rendered buttons and embeds) is decorated as it appears; lazy `data-src` iframe attributes always.
+An iframe that already loaded keeps its URL (rewriting it reloads the form) unless
+`decorate_reload_iframes: true`. **These are draft settings: publish to apply.** The engine (and therefore
+decoration) only loads when the published container has at least one enabled tag. For custom flows the
+site can call `trackflow('decorate', url)` / `trackflow('vid')`. Independently of this setting, the tag
+fills any on-page input named `tf_vid` with the visitor id.
+
+`shopify_events` (Shopify Customer Events code only, [install-cms.md](install-cms.md) §4): `true` = also
+send `ViewCategory`, `ViewCart`, `AddShippingInfo`; a list of some of them; `false` / `null` = none.
+The funnel events follow the site setting `ecommerce_datalayer` (or a published tag sending that name),
+`PageView` follows `auto_pageview` (or published `page_view` tags).
 
 ---
 
@@ -436,7 +452,7 @@ Listen to several names with a regex name: `"name": "/^(quote_sent|quote_signed)
 | Form tag fires on failed validation | `wait_for: "none"` or a click trigger on the submit button. Use `form_submit` with `auto` / `text` / `element`. |
 | Form inside an iframe from another domain | Can't be read. Use `iframe_message` presets (Calendly, Cal, Typeform, Tally, Jotform, HubSpot) or the provider's webhook (integrations.md). |
 | Shared trigger edit broke another tag | `update_tag_trigger` changes all `used_by` tags. Duplicate first. |
-| `decorate_checkouts` has no effect | Not published, or the container has no enabled tags (engine not loaded), or no consent yet. |
+| `decorate_checkouts` has no effect | Not published, or the container has no enabled tags (engine not loaded), or no consent yet. A form iframe that loaded before the tag ran keeps its URL: `decorate_reload_iframes: true`. The form needs a hidden field named `tf_vid`. |
 | `once: "visitor"` fires again | It's localStorage; cleared storage / other browser = new visitor. |
 | Rollback lost my edits | `rollback` resets the draft by default. Use `restore_draft: false` to keep unpublished work. |
 | custom_js doesn't run | Site setting `allow_custom_js` was switched off (default on); turn it back on with `update_site` only when the customer asks. |

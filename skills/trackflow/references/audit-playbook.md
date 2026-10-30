@@ -16,17 +16,18 @@ period: the last 30 days.
 
 | # | Call | Look for |
 |---|---|---|
-| 1 | `sites → get_site` | `last_seen_at` (tag alive?), `auto_pageview` / `auto_forms` / `ecommerce_datalayer` (match what the customer wants?), `consent_mode`, `dedup` and `block_bots` on, `cross_domains` |
-| 2 | `destinations → list_destinations` | each platform `enabled`, `mode`, `ready`, `missing` fields, **test fields left on** |
-| 3 | `reports → get_overview {"days": 30}` | volume trend vs `prev`, conversions, revenue, failed / partial / blocked / no_destination counts |
+| 1 | `sites → get_site` | `last_seen_at` (tag alive?), `auto_pageview` / `auto_forms` / `ecommerce_datalayer` (match what the customer wants?), `consent_mode`, `dedup` and `block_bots` on, `cross_domains`; Shopify: `shopify_pixel_detected` / `shopify_pixel_seen_at` |
+| 2 | `destinations → list_destinations` | each platform `enabled`, `mode`, `ready`, `missing` fields, **test fields left on**, `send_lifecycle` on/off (as the customer wants?) |
+| 3 | `reports → get_overview {"days": 30}` | volume trend vs `prev`, conversions, revenue, `refunds` / `net_revenue` / `cancelled_orders`, failed / partial / blocked / no_destination counts |
 | 4 | `reports → get_event_flow {"days": 30}` | per-destination `ok` / `error` / `skipped`, `last_error` |
 | 5 | `reports → list_events` with `status` = `failed`, `partial`, `no_destination`, `blocked` | which events, which destinations, `block_reason` |
-| 6 | `reports → get_event {"event_row_id": …}` on 2–3 samples per problem | the exact payload and the platform's response |
+| 6 | `reports → get_event {"event_row_id": …}` on 2–3 samples per problem | the exact payload and the platform's response; `skipped` reasons ("Too old for <Platform>", "Refunds and cancellations are off…", Google Ads "Queued") |
 | 7 | `reports → list_events {"name": "Purchase"}` (and `Lead`, …) | numeric `value`, `currency`, one row per order, `origin` mix (browser + webhook for the same order must share the id) |
+| 7b | `reports → list_events {"name": "OrderRefunded"}` / `"OrderCancelled"` / `"SubscriptionRenewed"`, `origin: "webhook"` | lifecycle events arriving at all; `get_event` → per-destination deliveries (skipped as too old / lifecycle off / unsupported platform?) |
 | 8 | `reports → get_match_quality {"days": 30}` | score per conversion event, `em` / `ph` / `fbc` coverage |
 | 9 | `tag_manager → get_container` (published and draft), `list_tags`, `publishing → list_versions` | what is live, unpublished drafts, disabled or duplicate tags, custom JavaScript |
-| 10 | `tag_manager → inspect_site` on home, product, checkout, thank-you, contact | hard-coded pixels / GTM that duplicate TrackFlow (`existing_tags`), forms or CTAs not tracked, dataLayer present but bridge off, checkout providers without an integration |
-| 11 | `integrations → list_checkout_integrations`, `get_checkout_log`, `list_crm_integrations`, `get_crm_log`, `list_offline_sources`, `list_offline_imports` | signing secret set, `last_error`, rows rejected |
+| 10 | `tag_manager → inspect_site` on home, product, checkout, thank-you, contact | hard-coded pixels / GTM that duplicate TrackFlow (`existing_tags`; Shopify: `shopify_pixels` channel-app pixel ids, `google_ads`), forms or CTAs not tracked, dataLayer present but bridge off, checkout providers without an integration, form iframes without decoration |
+| 11 | `integrations → list_checkout_integrations`, `get_checkout_log`, `list_webhook_integrations`, `list_crm_integrations`, `get_crm_log`, `list_offline_sources`, `list_offline_imports` | `signature_verification` / `verified`, `purchase_on`, `last_error`, rows rejected; in the logs the **`matched_by` mix** of recent orders (`vid` / `order` good; mostly `email` / `phone` / `landing_url` / `none` = weak attribution), `ignored` reasons ("Purchase is sent when…", "No tracked Purchase…"), whether refund/cancel events ever arrive |
 | 12 | `install → domain_status`, `list_blocking_rules` | first-party domain active?, rules blocking real traffic |
 | 13 | `reports → get_attribution {"days": 30}` | conversions with source "Direct" that should be ads (lost click ids, missing cross-domain) |
 
@@ -64,8 +65,23 @@ period: the last 30 days.
 - Conversion events carry email/phone (forms, `identify`, webhooks, CRM mappings).
 - `fbc` / click ids present for paid traffic; cross-domain and checkout decoration set for hosted
   checkouts so server conversions join the ad click.
+- Webhook orders mostly `matched_by: vid` or `order`; passthrough set up for each server source
+  ([visitor-id.md](visitor-id.md)): WooCommerce snippet, Shopify cart attributes (theme tag), `tf_vid`
+  hidden fields, server code for Stripe sessions / PayPal / Razorpay / bKash / Nagad.
 
-**G. Privacy**
+**G. Orders, refunds and cancellations**
+- Shopify: Customer Events code detected (`shopify_pixel_detected`), funnel settings on, order webhook
+  registered with all five topics; no channel app sending the same pixel ids.
+- Store/checkout webhooks registered with the refund/cancel topics; `purchase_on` fits the business
+  (cash on delivery → `created_cod` + cancellations; delivered-only → `completed` and no thank-you
+  Purchase).
+- `refunds` / `net_revenue` plausible against the shop's own numbers.
+- `send_lifecycle` matches what the customer decided; lifecycle deliveries not silently `skipped` on
+  platforms that can't take them (Snapchat, Pinterest, Quora, AppLovin, Google Ads full refunds).
+- Late webhook/offline/refund events: few "Too old for <Platform>" skips on the important platforms
+  (otherwise speed up the source or the `purchase_on` stage).
+
+**H. Privacy**
 - `consent_mode` on when the customer has EU/UK visitors or a consent banner.
 - Server-side sources only send consenting customers' data.
 

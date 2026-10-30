@@ -30,8 +30,8 @@ Returns `{ mode, src, global, html, notes[] }` (or `{ mode, error }`). Give the 
 **Critical:** stealth is **on by default** for every site's first-party settings. So `mode: "auto"`
 (and `stealth` / `custom_domain` / `proxy`) returns a tag whose JS API is **not** `window.trackflow` but
 a random global name, shown in the result's `global` field and in `notes`. `window.trackflow` is then
-**undefined**. Every on-page call (`trackflow('track', …)`, theme snippets, GTM Custom HTML, the Shopify
-cart-attribute snippet) must use that global name instead. To keep the name `trackflow`, either install
+**undefined**. Every on-page call (`trackflow('track', …)`, theme snippets, GTM Custom HTML) must use that global
+name instead. To keep the name `trackflow`, either install
 `mode: "standard"`, or set `install {"action": "update_first_party_settings", "site_id": 12, "stealth": false}`
 and fetch the snippet again.
 
@@ -84,7 +84,7 @@ snippet has one.
 | `identify` | `trackflow('identify', userData)` | – | Attaches customer details to this visitor (kept in the browser and merged into every later event, also on later page loads). No event is sent. |
 | `page` | `trackflow('page', customData?)` | – | Sends a `PageView` for the current URL and, if the URL changed, runs the container's page tags. Rarely needed (SPA routes are automatic). |
 | `consent` | `trackflow('consent', true \| false)` | – | Stores the visitor's marketing-consent choice in the browser; overrides any detected CMP. `false` stops all tracking for that browser even when consent mode is off. |
-| `vid` | `trackflow('vid')` | visitor ID or `''` | The TrackFlow visitor ID (`''` until tracking has started, e.g. before consent). Pass it to checkouts (Stripe `client_reference_id`, Shopify cart attribute `_tf_vid`, …). |
+| `vid` | `trackflow('vid')` | visitor ID or `''` | The TrackFlow visitor ID (`''` until tracking has started, e.g. before consent). Pass it to server-created checkouts (Stripe `client_reference_id`, PayPal `custom_id`, Razorpay `notes.tf_vid`, …; see visitor-id.md). Shopify cart attributes and `tf_vid` form fields are filled automatically. |
 | `decorate` | `trackflow('decorate', url)` | URL string | The URL with the visitor ID added in the provider's passthrough field (needs the tag engine and `decorate_checkouts`; otherwise returns the URL unchanged). |
 | `get` | `trackflow('get', variableName)` | value | Reads a tag-container variable. |
 | `set` | `trackflow('set', name, value)` | – | Sets a runtime value that container variables can read. |
@@ -303,6 +303,26 @@ root domain need nothing. Server redirects, form posts and `window.open` are not
 There is no `data-*` attribute API in the tracker itself. Clicks, forms, scroll, visibility, video and
 dataLayer events are tracked with **tags** (tag manager). Adding attributes such as
 `data-track="signup"` to elements is still useful: a click tag can target `[data-track="signup"]`.
+
+### 6.9 Visitor-id passthrough and Shopify (automatic)
+
+After consent, the tracker hands the visitor id to server-side sources without any extra code
+([visitor-id.md](visitor-id.md)):
+
+- **`tf_vid` form fields:** inputs named `tf_vid` (also `tfvid` or ending in `/tf_vid`) are filled with
+  the visitor id, also in forms rendered later and same-origin iframes without `src`; existing values are
+  kept. The form tool's webhook/CRM record then carries it.
+- **Shopify cart attributes:** on Shopify storefronts the tag writes `_tf_vid`, `_tf_fbc`, `_tf_fbp`,
+  `_tf_gclid` to the cart (`/cart/update.js`, once a cart exists; again after the theme changes the
+  cart). The order webhook reads them from `note_attributes`. Any older hand-written cart-attribute
+  snippet can be removed.
+- **Shopify Customer Events code detected** (`get_site.shopify_pixel_detected`): the theme tag skips the
+  events that code sends itself — `PageView` while `auto_pageview` is on (page views from tags are kept),
+  and `ViewContent`, `Search`, `AddToCart`, `InitiateCheckout`, `AddPaymentInfo`, `Purchase` when
+  `ecommerce_datalayer` is on or a published tag sends that name. `?tf_debug=1` logs them as "dropped
+  (sent by the TrackFlow Shopify pixel)". Other tags (clicks, scroll, forms) keep running.
+- Link/iframe decoration for checkouts and form tools: container setting `decorate_checkouts`
+  ([tag-manager.md](tag-manager.md) §7).
 
 ---
 

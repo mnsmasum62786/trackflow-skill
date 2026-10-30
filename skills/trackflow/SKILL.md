@@ -1,6 +1,6 @@
 ---
 name: trackflow
-description: Set up, audit and fix website conversion tracking with TrackFlow (trackflow.webanalyticssolution.com) through its MCP server or REST API. Covers the install tag, Meta Pixel + Conversions API, TikTok, Google Ads, GA4, Snapchat, Pinterest, LinkedIn and other ad platforms, browser + server deduplication, event parameters, the built-in tag manager, first-party tracking domains, checkout/CRM/offline conversions, CMS installs (Shopify, WordPress/WooCommerce, Wix, Webflow, Squarespace, Next.js) and tracking audits. Use whenever the user mentions TrackFlow, its MCP tools, or asks to track conversions, pixels or CAPI on a site connected to TrackFlow.
+description: Set up, audit and fix website conversion tracking with TrackFlow (trackflow.webanalyticssolution.com) through its MCP server or REST API. Covers the install tag, Meta Pixel + Conversions API, TikTok, Google Ads, GA4, Snapchat, Pinterest, LinkedIn and other ad platforms, browser + server deduplication, event parameters, the built-in tag manager, first-party tracking domains, checkout/CRM/offline conversions, refunds and cancellations, visitor-id passthrough, CMS installs (Shopify Customer Events, WordPress/WooCommerce, Wix, Webflow, Squarespace, Next.js) and tracking audits. Use whenever the user mentions TrackFlow, its MCP tools, or asks to track conversions, pixels or CAPI on a site connected to TrackFlow.
 ---
 
 # TrackFlow
@@ -45,7 +45,7 @@ destinations {"action": "help", "of": "add_destination"}
 | `tag_manager` | get_tagging_reference, inspect_site, variables, triggers, tags, list_recipes, apply_recipe, update_container_settings, get_container |
 | `publishing` | create_preview_link, list_preview_links, delete_preview_link, publish_version, list_versions, rollback |
 | `conversions` | get_conversion_events, set_conversion_events, delete_conversion_event, restore_conversion_event |
-| `integrations` | checkout webhooks, CRMs, mapped webhooks, offline conversions (CSV / sheets) |
+| `integrations` | checkout webhooks (stores, payments, courses, bookings), CRMs, mapped webhooks (+ `test_webhook_payload`), offline conversions (CSV / sheets) |
 | `install` | get_install_snippet, get_proxy_config, domain_status, add_domain, verify_domain, remove_domain, update_first_party_settings, blocking rules |
 | `account` | get_account, update_account, list_api_keys, create_api_key, revoke_api_key |
 
@@ -104,10 +104,23 @@ destinations {"action": "help", "of": "add_destination"}
    Pass them straight into the tool fields. Never repeat a full secret back; tool results mask them, so
    confirm only the last 4 characters. One-time values the customer must use (new API key, webhook
    URLs, install snippet, proxy config) are returned in full: hand those over.
-10. **Ask before you destroy.** `delete_site` and `clear_site_data` cannot be undone (they need
+10. **Refunds and cancellations are opt-in per destination.** Store and checkout webhooks create
+   `OrderRefunded`, `OrderCancelled`, `SubscriptionRenewed`, … automatically; they never count as
+   conversions and only reach a platform when its `send_lifecycle` is on (off by default). Turning it on
+   changes what the platform reports and optimises on: explain the per-platform effect and only do it
+   when the customer asks ([references/lifecycle-events.md](references/lifecycle-events.md)).
+11. **Per-platform event choice without touching tags.** To send different events to different
+   platforms ("everything to Meta, only Purchase and Lead to TikTok"), set the destination's
+   `event_filter` (`only` / `except`) and `event_list` with `update_destination`. It applies to the
+   browser pixel and the server copy; excluded deliveries show `Not in this destination's event list`.
+12. **Server orders need the visitor id.** A webhook sale is credited to the ad click only when TrackFlow
+   can find the visitor (`matched_by`: `vid` > `order` > `provider_ref` > `email` > `phone` >
+   `landing_url` > `none`). Set up the passthrough for every server source
+   ([references/visitor-id.md](references/visitor-id.md)).
+13. **Ask before you destroy.** `delete_site` and `clear_site_data` cannot be undone (they need
    `confirm_domain`). Removing a destination, integration, domain or API key stops data or access.
    Confirm first unless the customer asked for exactly that; prefer `enabled: false` to deleting.
-11. **Plain language.** The customer is usually not technical. Explain what you did and what it means
+14. **Plain language.** The customer is usually not technical. Explain what you did and what it means
     for their ads ("Facebook will now see every purchase with its amount"), not tool names.
 
 ## 3. Setup workflow (summary)
@@ -123,6 +136,11 @@ Full step-by-step version with checklists: [references/setup-playbook.md](refere
    does not exist. Use that name in any on-page code, or use mode `standard` to keep `trackflow(...)`.
    Event names are case-sensitive Meta-style standard names (`Purchase`, `Lead`, `AddToCart`); TrackFlow
    translates them for every other platform.
+   **Shopify:** the main install is the Customer Events code (`get_install_snippet` mode `shopify_pixel`,
+   pasted under Settings → Customer events → Add custom pixel); it covers checkout and thank-you pages,
+   sends what `auto_pageview` / `ecommerce_datalayer` / `shopify_events` allow, and `get_site` shows
+   `shopify_pixel_detected`. The theme tag is optional (custom click/form tags, cart attributes); it skips
+   the events the pixel sends.
 3. **Understand the site:** `inspect_site` per page type, `get_tagging_reference`, then `list_tags`,
    `list_tag_triggers`, `list_variables` for what already exists.
 4. **Agree the plan** in one or two sentences: which events, from which pages, to which platforms.
@@ -132,8 +150,13 @@ Full step-by-step version with checklists: [references/setup-playbook.md](refere
    ([references/tag-manager.md](references/tag-manager.md))
 6. **Connect platforms** with the customer's credentials: `list_platforms` → `add_destination` →
    `test_destination`. ([references/ad-platforms.md](references/ad-platforms.md))
-7. **Server-side sources** when the sale or lead happens off-site: checkout webhooks, CRM, offline
-   conversions ([references/integrations.md](references/integrations.md)).
+7. **Server-side sources** when the sale or lead happens off-site, and as a backup for store purchases:
+   checkout webhooks (choose `purchase_on`: paid / created / completed / `created_cod` for cash on
+   delivery; register the refund and cancel events too), CRM, mapped webhooks (`order_id_path`,
+   `signature`, `test_webhook_payload`), offline conversions
+   ([references/integrations.md](references/integrations.md)). Pass the visitor id through
+   ([references/visitor-id.md](references/visitor-id.md)); decide `send_lifecycle` per destination with
+   the customer ([references/lifecycle-events.md](references/lifecycle-events.md)).
 8. **Preview and test:** `create_preview_link` (events are marked test), then `list_events`
    with `test: "only"`, `get_event`, `send_test_event`.
 9. **Publish** (`publish_version` with notes) as the customer instructed.
@@ -149,11 +172,14 @@ Full version with a symptom → cause → fix table:
 [references/audit-playbook.md](references/audit-playbook.md) and
 [references/reports-and-audit-data.md](references/reports-and-audit-data.md).
 
-1. `get_site` (settings, tag seen?), `list_destinations` (ready / missing fields / mode / test mode left on?).
+1. `get_site` (settings, tag seen?, Shopify `shopify_pixel_detected`), `list_destinations` (ready /
+   missing fields / mode / test mode left on? `send_lifecycle` as agreed?).
 2. `inspect_site` on key pages: duplicate pixels, missing dataLayer, forms and checkout providers.
 3. `get_overview` and `list_events` (filter `status: "failed"`, `"no_destination"`, `"browser_only"`).
 4. `get_event` on samples: parameters, user data, platform responses.
-5. `get_match_quality`: which user-data fields are missing and how to raise them.
+5. `get_match_quality`: which user-data fields are missing and how to raise them. Webhook sources:
+   `get_checkout_log` `matched_by` mix, refund/cancel events arriving, `refunds` / `net_revenue` in
+   `get_overview`, deliveries skipped as "Too old for <Platform>".
 6. `list_tags` / `get_container` / `list_versions`: draft vs live, unused or duplicate tags.
 7. Write findings as: problem → impact on ads → fix → who does it (you or the customer). Fix what
    the tools can fix once the customer agrees.
@@ -169,7 +195,9 @@ Full version with a symptom → cause → fix table:
 | Event names, parameters, user data, what to send and what not to send | [references/event-parameters.md](references/event-parameters.md) |
 | Per ad platform (and the `custom` webhook destination for any other platform): credentials, modes, gotchas | [references/ad-platforms.md](references/ad-platforms.md) |
 | Tags, triggers, variables, recipes, versions, preview | [references/tag-manager.md](references/tag-manager.md) |
-| Checkout webhooks, CRM, offline conversions, third-party tools | [references/integrations.md](references/integrations.md) |
+| Checkout webhooks (Purchase stage `purchase_on`), CRM, offline conversions, mapped webhooks, third-party tools | [references/integrations.md](references/integrations.md) |
+| Linking server orders to the ad click: `matched_by`, `tf_vid` passthrough per checkout, WooCommerce/Stripe/PayPal/SSLCommerz/Razorpay/bKash/Nagad code | [references/visitor-id.md](references/visitor-id.md) |
+| Refunds, cancellations, renewals, no-shows: `send_lifecycle`, what each platform does, max event age, net revenue, cash on delivery | [references/lifecycle-events.md](references/lifecycle-events.md) |
 | Custom tracking domain, ad-blocker resistance, blocking rules | [references/first-party-domain.md](references/first-party-domain.md) |
 | Reading reports, event statuses, match quality | [references/reports-and-audit-data.md](references/reports-and-audit-data.md) |
 | Step-by-step setup checklist | [references/setup-playbook.md](references/setup-playbook.md) |

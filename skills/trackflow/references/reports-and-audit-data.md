@@ -11,13 +11,13 @@ group (`{"action": "...", "site_id": N, ...}`) unless noted. All are read-only e
 | `list_events` | `name`, `status`, `origin`, `q`, `conversions_only`, `conv`, `test` (`only`/`exclude`), `limit` (default 25, max 200), `offset` | The event log |
 | `get_event` | `event_row_id` (= `id` from list_events, not `event_id`) | Full event + every delivery payload and platform response |
 | `retry_event_delivery` | `event_row_id` | Re-send to all enabled destinations with current settings |
-| `get_attribution` | `days` (default 30) / range, `model` (`last` default, `first`), `conv` | Conversions & revenue by source, campaign, event, device, landing page |
+| `get_attribution` | `days` (default 30) / range, `model` (`last` default, `first`), `conv` | Conversions, revenue, refunds, net revenue and cancelled orders by source and campaign; conversions by event, device, landing page |
 | `list_journeys` / `get_journey` | range, `all`, `conv` / `vid` | Visitor timelines |
 | `get_match_quality` | `days` / range | Score 0–10 per event name + identifier coverage |
 | `send_test_event` | `event_name` (default Lead), `value` | One server test event through the pipeline |
 | `test_destination` (group `destinations`) | `destination_id`, `event_name`, `value` | Same, then waits and returns each destination's answer |
 | `inspect_site` (group `tag_manager`) | `url` | What is on a page and can be tracked |
-| `get_conversion_events` (group `conversions`) | – | Which event names count as conversions in TrackFlow reports |
+| `get_conversion_events` (group `conversions`) | – | Which event names count as conversions in TrackFlow reports (`lifecycle_events` listed apart: never conversions) |
 
 `conv`: `"site"` (default, the site's conversion list) or a destination id (that destination's own
 list). It only changes TrackFlow's reporting, never what platforms receive. New sites count `Purchase`
@@ -33,6 +33,7 @@ and `Lead` as conversions; `set_conversion_events` changes that (and re-marks pa
 | `range` | `{from, to, days, custom}` |
 | `totals.events` | **Every** event in the period, including blocked and test events. |
 | `totals.sessions`, `visitors`, `conversions`, `revenue` | Real traffic only: **excludes blocked and test events**. Revenue = sum of `value` on conversion events. |
+| `totals.refunds`, `net_revenue`, `cancelled_orders` | Refunded amounts + cancelled/charged-back order values of orders whose Purchase counted; `net_revenue` = revenue − refunds; distinct cancelled orders. From lifecycle events ([lifecycle-events.md](lifecycle-events.md)). |
 | `totals.delivered`, `failed`, `partial`, `blocked` | Event counts by status. |
 | `totals.undelivered` | Count of status `no_destination`. (`browser_only` and `pending` are not broken out here; use `list_events status` or `get_event_flow`.) |
 | `totals.match` | Average match score of all events. |
@@ -87,7 +88,7 @@ integrations and mapped webhooks), `offline`, `crm`, `api`.
 `em_r`, `em_gp`, `ph_e164`, `ph_last10`), `custom_data`, `click_ids` (`fbp`, `fbc`, `ttp`, `gclid`…),
 `value`, `currency`, `is_conversion`, `match_score`, `status`, `block_reason`, `is_test`, `created_at`.
 
-`deliveries`: one row **per attempt** (a retry adds rows): `type` (platform), `status` (`ok` / `error` /
+`deliveries`: one row **per attempt** (a retry or a queued Google Ads restatement adds rows): `type` (platform), `status` (`ok` / `error` /
 `skipped`), `http_status`, `payload` (exactly what was sent; hashed identifiers only, never
 credentials), `response` (platform reply, trimmed to 4000 chars).
 
@@ -96,7 +97,11 @@ Reading deliveries:
 | You see | Usually means |
 |---|---|
 | `skipped` + "Test event: set this destination's test code / test mode…" | A test/preview event and the destination has no test mode set. Nothing was sent. |
-| `skipped` with another reason | The platform can't use this event (e.g. GA4 events older than 72 h; AppLovin without page URL; Taboola/Outbrain without their click id). |
+| `skipped` + "Too old for <Platform> (max N days)" | Late webhook/CRM/offline/refund event beyond the platform's limit (GA4 72 h; Meta, TikTok, Pinterest, Reddit, OpenAI 7 days; Snapchat 37; LinkedIn, Google Ads, Microsoft 90). Not sent, by design. |
+| `skipped` + "Refunds and cancellations are off for this destination" | A lifecycle event (`OrderRefunded`, `OrderCancelled`…) and `send_lifecycle` is off. Expected unless the customer wants it. |
+| `skipped` + "Queued: Google Ads accepts value restatements 24 h after the conversion…" | A partial-refund restatement waiting; a second row appears when it is sent. |
+| `skipped` + "Google Ads retractions … need the Google Ads API" | Full refund / cancellation: Google Ads can't be updated by TrackFlow. Adjust in Google Ads by hand if needed. |
+| `skipped` with another reason | The platform can't use this event (e.g. AppLovin without page URL; Taboola/Outbrain without their click id; unmapped event names). |
 | Meta HTTP 400 "Invalid OAuth access token" / code 190 | Token wrong, expired, revoked, or for another business. New token → `update_destination` → retry. |
 | Meta HTTP 400 mentioning the pixel/dataset id | Pixel id typo, or the token's system user has no access to that pixel. |
 | Meta HTTP 400 about `event_time` | Event too old (Meta: 7 days; 62 for `physical_store`) — typical for offline/CRM backfills. |
@@ -194,7 +199,7 @@ refused. HTTP ≥400 returns `{url, status, error}`. Bot-protected sites may ans
 |---|---|
 | `status`, `url`, `title` | Final URL after redirects |
 | `platform` | Detected: shopify, woocommerce, wordpress, elementor, wix, squarespace, webflow, framer, nextjs, bigcommerce, magento, gohighlevel |
-| `existing_tags` | `gtm` (GTM-…), `ga4` (G-…), `meta_pixel` (ids from `fbq('init')`), `tiktok_pixel`, `trackflow` (bool; may miss first-party/stealth snippets) |
+| `existing_tags` | `gtm` (GTM-…), `ga4` (G-…), `meta_pixel` (ids from `fbq('init')`), `tiktok_pixel`, `trackflow` (bool; may miss first-party/stealth snippets), `google_ads` (`AW-…`, when found), `shopify_pixels` (Shopify only: `meta` pixel ids, `tiktok` pixel codes, `custom_pixels` count from the store's web-pixel config = channel apps and Customer Events pixels) |
 | `forms[]` (≤15) | `selector` (suggested), `id`, `action`, `method`, `builder` (cf7, elementor, gravity, wpforms, ninja, fluent, formidable, hubspot, webflow, squarespace, mailchimp, klaviyo, woocommerce_checkout, shopify_cart), `kind` (`lead`, `newsletter`, `search`, `login`, `add_to_cart`, `checkout`), `external`, `fields[{name, type, label, required}]`, `submit_text` |
 | `embedded_forms` | Client-rendered builders found: hubspot, typeform, jotform, tally, calendly, cal, klaviyo, cf7, gravity, elementor, wpforms |
 | `ctas[]` (≤40) | Buttons/links with CTA words or `tel:`/`mailto:`/`sms:`: `tag`, `text`, `href`, `selector`, `provider` |
@@ -203,7 +208,7 @@ refused. HTTP ≥400 returns `{url, status, error}`. Bot-protected sites may ans
 | `datalayer` | `pushes` (≤8 snippets), `events`, `gtag_events`, `ecommerce` (GA4 ecommerce present) |
 | `checkout_links[]` | `{provider, href, text}`: stripe_payment_link, stripe_checkout, paypal, lemonsqueezy, gumroad, thrivecart, samcart, paddle, shopify_checkout, calendly, cal, typeform, jotform, tally, hubspot, kajabi, teachable, podia, kartra, clickfunnels, whatsapp, onsite_cart |
 | `iframes[]`, `videos` | Embeds with provider; html5/youtube/vimeo counts |
-| `suggestions[]` | Ready advice: which recipe, enable `ecommerce_datalayer`, `decorate_checkouts`, tel/WhatsApp click tags, video triggers |
+| `suggestions[]` | Ready advice: which recipe, enable `ecommerce_datalayer`, `decorate_checkouts`, tel/WhatsApp click tags, video triggers; on Shopify: install the Customer Events code + order webhook, and which channel-app pixels would double count |
 
 Content rendered by JavaScript (SPAs, many Wix/Framer sections, popups, cart drawers) is invisible to
 it: confirm selectors in preview. Inspect product, checkout, thank-you and contact pages separately.
@@ -224,8 +229,10 @@ it: confirm selectors in preview. Inspect product, checkout, thank-you and conta
 7. `get_container which:"published"` + `list_tags` + `list_versions`: what is live, unpublished drafts,
    custom JS.
 8. `inspect_site` on key pages: hard-coded pixels (`existing_tags`) that duplicate TrackFlow events.
-9. `list_checkout_integrations` / `list_crm_integrations` / `list_offline_sources`: secrets set,
-   `last_error`, logs.
+9. `list_checkout_integrations` / `list_crm_integrations` / `list_webhook_integrations` /
+   `list_offline_sources`: secrets set (`signature_verification`, `verified`), `purchase_on`,
+   `last_error`, logs; `matched_by` mix in `get_checkout_log`; refund/cancel topics registered.
+   Shopify: `get_site.shopify_pixel_detected`.
 10. Report findings ranked by revenue impact; propose fixes; change nothing until the customer agrees.
 
 ## 9. Diagnosis table
@@ -251,4 +258,7 @@ it: confirm selectors in preview. Inspect product, checkout, thank-you and conta
 | Conversions count looks wrong in TrackFlow | `conversion_events` list doesn't contain the event (only Purchase + Lead by default), or sample data loaded. | `get_conversion_events` / `set_conversion_events` (reporting only); `clear_site_data` only with confirmation. |
 | Preview events appear in Meta browser reports | Browser pixels fire for preview events too. | Use a platform test code during preview, or a staging site. |
 | Tag change not visible | Draft unpublished, or config cache (~1 min). | `get_container` → `publish_version` (if approved) → reload after a minute. |
-| Webhook purchases not attributed to ads | No vid passthrough and email unknown from the browser. | `decorate_checkouts` (+ publish) or pass `trackflow('vid')`; capture email earlier. |
+| Webhook purchases not attributed to ads | `matched_by` mostly `email` / `phone` / `landing_url` / `none`: no vid passthrough, no thank-you Purchase with the order id (order binding), email unknown from the browser. | Passthrough per checkout ([visitor-id.md](visitor-id.md)), `decorate_checkouts` (+ publish), thank-you Purchase with `purchase_<order id>`; capture email earlier. |
+| Shopify purchases missing or doubled | Customer Events code not installed / not connected (`shopify_pixel_detected` false), funnel settings off, or a channel app (Facebook & Instagram, TikTok, Google & YouTube) sends the same pixel ids. | `get_install_snippet` mode `shopify_pixel`; `ecommerce_datalayer` on; `inspect_site` → `existing_tags.shopify_pixels`; disable the app's data sharing. |
+| Revenue in TrackFlow higher than the shop's net sales | Refunds and cancellations not reaching TrackFlow (refund/cancel webhook topics not registered). | Register the lifecycle topics ([lifecycle-events.md](lifecycle-events.md) §5); compare `net_revenue`. |
+| Platform still counts refunded/cancelled orders | `send_lifecycle` off, or the platform can't undo purchases (only GA4 `refund` and Google Ads partial restatements change values). | Explain per platform; turn on `send_lifecycle` only if the customer wants it. |

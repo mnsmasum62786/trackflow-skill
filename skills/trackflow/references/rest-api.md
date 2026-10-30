@@ -120,8 +120,9 @@ Response:
 | `GET /t.js` | Classic tracker script | Install via the snippet from `get_install_snippet`, not by hand |
 | `GET /api/public/config?k=SITE_KEY[&preview=TOKEN]` | Config the tracker loads (browser tags without secrets, published container, settings) | Loading it marks the site as seen. Unknown key → 404 `unknown site` |
 | `POST /collect` | Browser event collector used by the tracker | Body is JSON sent as `text/plain`: `{k: site_key, e: event_name, id: event_id, vid, sid, u: url, r: referrer, ud: user_data, cd: custom_data, ids: click_ids, rl: is_reload, c: consent, test}`. Rate limit 120/min per IP+site (`429 rate limited`). Bot filtering, reload blocking and consent apply only here. Do not use it for server-side events — use `/api/v1/events` |
-| `POST /hooks/:token` | Simple mapped webhook (`create_webhook_integration`) | Any JSON. **No signature check**. Fields extracted with the integration's `mapping`. `filter_path`/`filter_value` mismatch → `{ok:true, ignored:true, reason:"filtered"}`. Disabled/unknown token → 404 `unknown webhook`. Response = ingest result |
-| `POST /hooks/checkout/:token` | Checkout provider webhook (`create_checkout_integration`) | Signature verified when a secret is saved (bad signature → 400 with reason, logged as `rejected`). Response `{ok:true, results:[{status: created\|duplicate\|ignored, order_id, event_id, value, vid, matched_by, …}]}` |
+| `POST /hooks/:token` | Mapped webhook (`create_webhook_integration`) | Any JSON. Verified per the integration's `signature` scheme when a secret is set (TrackFlow HMAC / shared secret, the app's HMAC, header secret, Basic auth); failure → `401`. Fields extracted with the integration's `mapping` (orders, refunds, cancellations via `status_map`). Ignored bodies → `{ok:true, ignored:true, reason}` (filtered, status mapped to ignore, no tracked Purchase…). Disabled/unknown token → 404 `unknown webhook`. Response = ingest result |
+| `POST /hooks/checkout/:token` | Checkout provider webhook (`create_checkout_integration`) | Signature verified when a secret is saved (bad signature → 400 with reason, logged as `rejected`). Response `{ok:true, results:[{status: created\|duplicate\|ignored, order_id, event_name, event_id, lifecycle?, value, vid, matched_by, …}]}`; a provider redelivery (same delivery id) → `{ok:true, duplicate_delivery:true}` |
+| `GET <stealth path>/<shopify_pixel file>` (also `/shopify.js` on the TrackFlow host) | Loader for the Shopify Customer Events code | Loaded by the code from `get_install_snippet` mode `shopify_pixel`, not by hand |
 | `POST /hooks/crm/:token` | CRM webhook (`create_crm_integration`) | JSON, form-encoded or Salesforce SOAP. Wrong secret → 401. Answers within 4 s (`{ok:true, accepted:true, processing:true}` if lookups are still running); Salesforce gets a SOAP Ack |
 | `GET /healthz` | `{ok:true}` | |
 | OAuth: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`, `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/revoke` | MCP sign-in | See `mcp-tools.md` §1 |
@@ -156,8 +157,8 @@ All paths below are under `/api`. `:siteId` is the numeric site id. Every write 
 ### Conversion lists (reporting only)
 | Method + path | Body | Notes |
 |---|---|---|
-| `GET /sites/:siteId/conversions` | — | `{selected, events, hidden, destinations}` |
-| `PUT /sites/:siteId/conversions` | `{events*: [names], destination_id?}` | Site list (re-marks history) or one destination's list. Google Ads → 400 |
+| `GET /sites/:siteId/conversions` | — | `{selected, events, hidden, destinations, lifecycle_events}` |
+| `PUT /sites/:siteId/conversions` | `{events*: [names], destination_id?}` | Site list (re-marks history) or one destination's list. Google Ads → 400. Lifecycle names are dropped (`ignored`, `note`) |
 | `DELETE /sites/:siteId/conversions/:name` | — | Custom names only |
 | `POST /sites/:siteId/conversions/:name/restore` | — | Un-hide |
 
@@ -166,14 +167,14 @@ Window query for reports: `?days=1–365` (default 7) or `?from=<ms>&to=<ms>` (t
 
 | Method + path | Query | Response |
 |---|---|---|
-| `GET /sites/:siteId/overview` | days/from/to, conv | totals, prev, series, top_conversions, top_sources, recent_events, recent_conversions, destinations |
+| `GET /sites/:siteId/overview` | days/from/to, conv | totals (incl. `refunds`, `net_revenue`, `cancelled_orders`), prev, series, top_conversions, top_sources, recent_events, recent_conversions, destinations |
 | `GET /sites/:siteId/events` | `status, name, origin, q, conversions=1, test=1\|0, conv, limit (1–200, default 50), offset` | `{events[], total, names[], conv}` |
 | `GET /sites/:siteId/events/:eventRowId` | — | `{event, deliveries[{id, type, status, http_status, payload, response, created_at}]}` |
 | `GET /sites/:siteId/events/deliveries` | `ids=1,2,3` (≤200), `full=1` | Latest delivery per destination per event + `destinations`, `browser_tags` |
 | `POST /sites/:siteId/events/:eventRowId/retry` | — | `{ok, status}` — re-sends live; blocked → 400 `Event cannot be resent` |
 | `POST /sites/:siteId/test-event` | `{event_name (default Lead), value}` | Ingest result. Flagged test: only destinations with a test code/test mode receive it |
 | `GET /sites/:siteId/match-quality` | days/from/to | `{events[{name, n, score, coverage{}}]}` |
-| `GET /sites/:siteId/attribution` | days/from/to, `model=last\|first`, conv | sources, campaigns, by_event, devices, landing |
+| `GET /sites/:siteId/attribution` | days/from/to, `model=last\|first`, conv | totals, sources, campaigns (with refunds, net_revenue, cancelled_orders), by_event, devices, landing |
 | `GET /sites/:siteId/journeys` | days/from/to, `all=1`, conv | ≤100 journeys |
 | `GET /sites/:siteId/journeys/:vid` | conv | visitor (identifier names only) + events |
 | `GET /sites/:siteId/flow` | days/from/to, `test=1\|0` | sources → events → destinations with counts and last errors |
@@ -184,7 +185,7 @@ Window query for reports: `?days=1–365` (default 7) or `?from=<ms>&to=<ms>` (t
 | `GET /platforms` | — | Every platform with modes and fields |
 | `GET /sites/:siteId/destinations` | — | `{items}` secrets masked (`first 6 ••• last 4`) |
 | `POST /sites/:siteId/destinations` | `{type*, config{…}, mode (both\|browser\|server), enabled, load_browser_pixel}` | 400 `{error, missing[keys], mode}` when fields are missing |
-| `PATCH /sites/:siteId/destinations/:id` | same (type fixed) | Omitted/`""`/masked secret keeps the saved value; `null` deletes it |
+| `PATCH /sites/:siteId/destinations/:id` | same (type fixed) | Omitted/`""`/masked secret keeps the saved value; `null` deletes it. `config.send_lifecycle` true/false = send refunds and cancellations |
 | `DELETE /sites/:siteId/destinations/:id` | — | Deletes credentials |
 | `GET /google/oauth/config` | — | `{managed, redirect_uri}` |
 | `POST /sites/:siteId/destinations/:id/google/auth-url` | — | `{url, redirect_uri, managed}` — single-use Google sign-in link (15 min) |
@@ -195,8 +196,9 @@ Window query for reports: `?days=1–365` (default 7) or `?from=<ms>&to=<ms>` (t
 |---|---|---|
 | `GET/POST /sites/:siteId/blocking-rules` | POST `{type* (ip\|url\|user_agent\|referrer\|event), pattern*, note, enabled}` | 400 `Pick a rule type` / `Pattern is required` / invalid IP pattern |
 | `PATCH/DELETE /sites/:siteId/blocking-rules/:id` | PATCH partial | 404 `Not found` |
-| `GET/POST /sites/:siteId/integrations` | POST `{event_name*, provider, name, mapping{…}, enabled}` | Items include `token`; webhook URL = `<base>/hooks/<token>` |
-| `PATCH/DELETE /sites/:siteId/integrations/:id` | PATCH partial (`mapping` replaced) | |
+| `GET/POST /sites/:siteId/integrations` | POST `{event_name*, provider, name, mapping{…}, signature{scheme,…}, secret, enabled}` | Items include `token`, `signature`, `verified`, `warnings`; webhook URL = `<base>/hooks/<token>`. 400 when a Purchase webhook has no `mapping.order_id_path` |
+| `PATCH/DELETE /sites/:siteId/integrations/:id` | PATCH partial (`mapping`, `signature` replaced) | |
+| `POST /sites/:siteId/integrations/:id/test` | `{payload (object or raw JSON string), headers, query, mapping}` | Dry run: signature result + events it would create; nothing stored or sent |
 
 ### Tag manager (draft) and publishing
 | Method + path | Body / query | Notes |
@@ -212,7 +214,7 @@ Window query for reports: `?days=1–365` (default 7) or `?from=<ms>&to=<ms>` (t
 | `POST /sites/:siteId/tag-triggers/:idOrName/duplicate` | — | |
 | `GET /sites/:siteId/recipes` · `POST /sites/:siteId/recipes/:recipe/apply` | `{options:{…}}` | recipes: `ecommerce, lead_form, booking, newsletter` |
 | `GET /sites/:siteId/container` | `which=draft\|published` | `unpublished_changes` flag |
-| `PATCH /sites/:siteId/container/settings` | `{decorate_checkouts}` | Draft setting |
+| `PATCH /sites/:siteId/container/settings` | `{decorate_checkouts, decorate_reload_iframes, shopify_events}` | Draft settings |
 | `GET /sites/:siteId/versions` | — | Version history |
 | `POST /sites/:siteId/versions` | `{notes}` | **Publishes the draft live** |
 | `POST /sites/:siteId/versions/:n/rollback` | `{by: "version", notes, restore_draft}` | **Live.** `:n` is the internal version **id** unless the body has `by: "version"` (then it is the version number) |
@@ -224,7 +226,7 @@ Field rules and enums: see `mcp-tools.md` §8–9.
 ### Checkout, CRM and offline integrations
 | Method + path | Body / query | Notes |
 |---|---|---|
-| `GET /checkout/providers` | — | Providers, secret labels, passthrough fields |
+| `GET /checkout/providers` | — | `purchase_on` values; providers with secret labels, `signed`, `events`, `purchase_stages`, passthrough fields |
 | `GET/POST /sites/:siteId/checkout/integrations` | POST `{provider*, name, secret, api_key, config{}, enabled}` | `webhook_url` = `<base>/hooks/checkout/<token>` |
 | `PATCH/DELETE /sites/:siteId/checkout/integrations/:id` | PATCH partial; omitted/masked secret keeps, `""` clears | |
 | `GET /sites/:siteId/checkout/integrations/:id/log` | — | Last 100 |
@@ -250,7 +252,7 @@ Field rules and enums: see `mcp-tools.md` §8–9.
 | `POST /sites/:siteId/edge/domains` | `{host*}` | Returns the CNAME record to create; max 5 per site |
 | `POST /sites/:siteId/edge/domains/:id/verify` | — | `{domain, dns}` |
 | `DELETE /sites/:siteId/edge/domains/:id` | — | |
-| `GET /sites/:siteId/edge/snippet` | `mode=auto\|custom_domain\|proxy\|stealth\|standard` | `{mode, src, global, html, notes}` |
+| `GET /sites/:siteId/edge/snippet` | `mode=auto\|custom_domain\|proxy\|stealth\|standard\|shopify_pixel` | `{mode, src, global, html, notes}`; `shopify_pixel`: `{mode, src, code, notes}` |
 | `GET /sites/:siteId/edge/proxy-config` | `platform=nginx\|apache\|cloudflare\|vercel\|nextjs\|netlify\|wordpress` | Ready-to-install config |
 
 ---
@@ -258,7 +260,7 @@ Field rules and enums: see `mcp-tools.md` §8–9.
 ## 5. Gotchas
 
 1. `/api/v1/events` needs `site_key` (`tf_…`), dashboard routes need the numeric `:siteId`. Mixing them gives `404 Unknown site_key` / `404 Site not found`.
-2. Server events without `visitor_id`, IP/UA or identifiers have low match quality and lose attribution; capture `_tf_vid` in the browser and pass it through checkout/forms.
+2. Server events without `visitor_id`, IP/UA or identifiers have low match quality and lose attribution; capture `_tf_vid` in the browser and pass it through checkout/forms. Payment callbacks without a webhook (bKash, Nagad, SSLCommerz): report the Purchase here from the merchant's server with the request's `_tf_vid`/`_fbp`/`_fbc` cookies and `event_id: purchase_<order id>` (code in `visitor-id.md` §5).
 3. Reuse the browser's event id for the same action; otherwise platforms count it twice.
 4. `is_conversion` in request bodies is ignored; set conversions with `PUT /sites/:siteId/conversions` (reporting only).
 5. `/api/v1/events` cannot backdate or flag test events. Use `/api/v1/offline-events` (≤ 90 days, Meta accepts ≤ 7 / 62 days) or the test-event route.

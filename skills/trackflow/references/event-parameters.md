@@ -21,6 +21,13 @@ becomes `PageView`.
 
 Also recognised by some adapters: `Download` (TikTok standard; custom on Meta). Anything else is a **custom event**.
 
+**Lifecycle events** (created by store/checkout/booking webhooks, never by tags): `OrderRefunded`, `OrderCancelled`,
+`SubscriptionRenewed`, `SubscriptionCancelled`, `BookingCancelled`, `BookingNoShow`, with `custom_data.lifecycle`
+(`refund`, `cancel`, `chargeback`, `renewal`, `subscription_cancel`, `booking_cancel`, `no_show`), `order_id`, a positive
+`value` and for refunds `partial`, `remaining_value`, `original_value`. They **never count as conversions** and reach
+a platform only when its destination has `send_lifecycle` on. Don't send these names from the browser. Details:
+[lifecycle-events.md](lifecycle-events.md).
+
 Which names count as "conversions" in TrackFlow reports is a per-site setting (default `Purchase`, `Lead`). It never
 changes what is sent to ad platforms.
 
@@ -30,6 +37,7 @@ Ways events enter TrackFlow (all go through the same pipeline):
 |---|---|---|
 | Browser tracker `trackflow('track', name, customData?, userData?, {id?, cv?})` | `options.id` or random | Fires browser pixels **and** a server copy with the same ID |
 | Container tags (`send_event` action, built via MCP) | tag's `event_id` template or random | Parses prices like `$1,299.00` and symbols → ISO currency; an ID already fired in this browser is not re-sent |
+| Shopify Customer Events code (`get_install_snippet` mode `shopify_pixel`) | `purchase_<numeric Shopify order id>` for purchases | Shopify's own events → `PageView` (needs `auto_pageview`), `ViewContent`, `Search`, `AddToCart`, `InitiateCheckout`, `AddPaymentInfo`, `Purchase` (need `ecommerce_datalayer` or a published tag with that name), extras `ViewCategory`, `ViewCart`, `AddShippingInfo` (container setting `shopify_events`) |
 | GA4 ecommerce dataLayer bridge (site setting, off for new sites) | `purchase_<transaction_id>` for purchases | Maps `view_item`→ViewContent, `add_to_cart`→AddToCart, `begin_checkout`→InitiateCheckout, `add_payment_info`→AddPaymentInfo, `purchase`→Purchase, `generate_lead`→Lead, `sign_up`→CompleteRegistration, `search`/`view_search_results`→Search, `add_to_wishlist`→AddToWishlist |
 | Server events API `POST /api/v1/events` (Bearer API key) | `event_id` or random | Fields: `site_key`, `event_name`, `event_id`, `url`, `referrer`, `user_data`, `custom_data`, `visitor_id`, `ip`, `user_agent`, `fbc`, `fbp`, `click_ids{}`; one event per request, ≤ 64 KB |
 | Webhooks / checkout / CRM / offline sources | mapped field or provider-prefixed random | Can carry `event_time` (backdated) and `action_source` |
@@ -299,14 +307,19 @@ retrying already-delivered events to GA4 / Taboola / Outbrain (no event-ID dedup
 
 TrackFlow accepts `event_time` (ms, seconds or ISO) only from sources that support backdating (webhooks, CRM, offline);
 values more than 90 days old or more than 60 s in the future are replaced with "now". The server events API has no
-`event_time` field (events are stamped on arrival). Platform limits enforced by TrackFlow (server copy skipped):
+`event_time` field (events are stamped on arrival). Checkout Purchases are stamped with the time of the `purchase_on`
+stage (paid / fulfilled / created); refunds and cancellations with the time they happened.
+
+Platform limits checked by TrackFlow before every server delivery (older events → `skipped` "Too old for <Platform>
+(max N days)"):
 
 | Platform | Limit |
 |---|---|
 | GA4 | 72 h |
-| OpenAI | 7 days |
-| Microsoft | 90 days |
-| Meta | 7 days (62 days for `physical_store`) — rejected by Meta, not pre-checked |
+| Meta | 7 days (62 days for `physical_store`) |
+| TikTok, Pinterest, Reddit, OpenAI | 7 days |
+| Snapchat | 37 days |
+| LinkedIn, Google Ads, Microsoft | 90 days (Google Ads value restatements: ≤ 54 days after the conversion) |
 | Outbrain | events > 5 min old carry their own `timestamp` |
 
 ---

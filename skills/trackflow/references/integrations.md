@@ -5,15 +5,22 @@ events (blocking rules, dedup, attribution, delivery to every enabled destinatio
 tools are in the `integrations` group (`{"action": "...", "site_id": N, ...}`), except
 `google_ads_sign_in_link` (group `destinations`).
 
-| Source | Use for | Origin in `list_events` | Signed? | Tools |
+| Source | Use for | Origin in `list_events` | Verified? | Tools |
 |---|---|---|---|---|
-| Checkout integration | Payments/bookings on Stripe, PayPal, Shopify, Lemon Squeezy, Paddle, Gumroad, ThriveCart, SamCart, WooCommerce, Calendly | `webhook` | Yes (per provider) | `list_checkout_providers`, `create/update/delete_checkout_integration`, `list_checkout_integrations`, `test_checkout_payload`, `get_checkout_log` |
+| Checkout integration | Store backup and payments/bookings: Shopify, WooCommerce, Stripe, PayPal, Lemon Squeezy, Paddle, Gumroad, ThriveCart, SamCart, Calendly, Razorpay, ClickFunnels 2.0, systeme.io, Teachable, Kajabi, Whop | `webhook` | Provider signature (Gumroad: seller_id; SamCart/Teachable/Kajabi: optional `?secret=`) | `list_checkout_providers`, `create/update/delete_checkout_integration`, `list_checkout_integrations`, `test_checkout_payload`, `get_checkout_log` |
 | CRM integration | Pipeline stages → events (HubSpot, GoHighLevel, Pipedrive, Salesforce, Zoho, generic) | `crm` | Provider signature or shared secret | `list_crm_providers`, `create/update/delete_crm_integration`, `list_crm_integrations`, `test_crm_payload`, `sync_crm_integration`, `get_crm_log` |
 | Offline conversions | Store/phone/back-office sales: CSV, batch API, Google Sheet / CSV URL on a schedule | `offline` | API key (batch API) | `import_offline_conversions`, `list_offline_imports`, `create/update/delete_offline_source`, `list_offline_sources`, `sync_offline_source` |
-| Mapped webhook ("simple") | Any app that POSTs JSON (Typeform, Tally, Zapier, a backend) | `webhook` | **No** | `create/update/delete_webhook_integration`, `list_webhook_integrations` |
+| Mapped ("custom") webhook | Any app that POSTs JSON (Typeform, Tally, Cal.com, Zapier, Razorpay without the preset, a backend) | `webhook` | Optional: TrackFlow signature, the app's own HMAC, header secret, Basic auth | `create/update/delete_webhook_integration`, `list_webhook_integrations`, `test_webhook_payload` |
 
-Rule of thumb: for payment providers always prefer a **checkout integration** (signature check, order
-dedup, alternate-id memory) over a mapped webhook; for CRMs use a **CRM integration**.
+Rule of thumb: for stores and payment providers always prefer a **checkout integration** (signature
+check, purchase stage, order dedup, refunds and cancellations, alternate-id memory) over a mapped webhook;
+for CRMs use a **CRM integration**. In the dashboard, Shopify and WooCommerce checkout integrations sit
+under **Integrations → Store backup**, the other providers under **Payments & checkout**, form/booking
+tools under **Forms & booking**, and the mapped webhook under **Offline & custom**.
+
+Besides the Purchase, checkout integrations and mapped webhooks create **lifecycle events** (refunds,
+cancellations, chargebacks, renewals, booking cancellations, no-shows). They never count as conversions
+and reach a destination only when its `send_lifecycle` is on: [lifecycle-events.md](lifecycle-events.md).
 
 ---
 
@@ -21,40 +28,45 @@ dedup, alternate-id memory) over a mapped webhook; for CRMs use a **CRM integrat
 
 ### Visitor matching (attribution)
 
-For every server-side event TrackFlow picks the visitor in this order:
-
-1. **Passthrough visitor id** (`vid`) found in the payload (Stripe `client_reference_id`, `metadata.tf_vid`,
-   Shopify cart attribute `_tf_vid`, CRM field `tf_vid`, CSV column `vid`…). Used only if that visitor
-   exists on the site (merchants' own ids in the same field are ignored).
-2. Else the most recent visitor with the same **hashed email**, then **hashed phone**.
-3. Else no visitor: the event still goes out with the hashed contact details it carries.
+For every server-side event TrackFlow picks the visitor in this order: passthrough visitor id (`vid`) →
+**order binding** (an earlier event of the same order id, e.g. the thank-you page Purchase) → provider ids
+remembered from earlier webhooks of the order (`provider_ref`) → hashed email → hashed phone → ad click
+ids in the order's landing URL (`landing_url`) → `none`. A passed-through vid counts only if that visitor
+exists on the site.
 
 A matched event **inherits the visitor's stored click ids** (`fbc`, `fbp`, `gclid`, `gbraid`, `wbraid`,
 `ttclid`, `msclkid`…), IP, user agent and earlier hashed identifiers, so the platform can tie it to the
-ad click. Results show this as `vid` + `matched_by` (`vid`/`passthrough`, `email`, `phone`).
+ad click. Results show `vid` + `matched_by` (`vid`, `order`, `provider_ref`, `email`, `phone`,
+`landing_url`, `none`). CRM and offline results use `vid` / `email` / `phone`.
 
-To get the visitor id into third-party checkouts, turn on link decoration (`update_container_settings
-decorate_checkouts`, then publish; see tag-manager.md) or have the developer pass `trackflow('vid')` into
-the provider's passthrough field.
+How to get the visitor id into each kind of checkout (automatic decoration, Shopify cart attributes,
+hidden `tf_vid` fields, WooCommerce/Stripe/PayPal/SSLCommerz/Razorpay/bKash/Nagad code):
+[visitor-id.md](visitor-id.md).
 
 ### Dedup
 
 | Source | event_id | Effect |
 |---|---|---|
-| Checkout integration | `purchase_<order id>` (other event names: `<eventname lowercased>_<order id>`; Calendly: `calendly_<invitee uuid>`) | Same id as the browser thank-you Purchase (`purchase_{{order_id}}` tag, or the GA4 dataLayer bridge `purchase_<transaction_id>`) → counted once. Alternate ids of one payment (Stripe session/payment intent/invoice, PayPal order/capture) are remembered, so the second webhook is a `duplicate`. |
+| Checkout integration | `purchase_<order id>` (other event names: `<eventname lowercased>_<order id>`; Calendly: `calendly_<invitee uuid>`). Lifecycle ids: [lifecycle-events.md](lifecycle-events.md) | Same id as the browser thank-you Purchase (`purchase_{{order_id}}` tag, the GA4 dataLayer bridge `purchase_<transaction_id>`, the Shopify Customer Events code) → counted once. The order id is used as sent (trimmed), e.g. `purchase_#1001` stays as is; ids written by older versions in sanitised form (`purchase__1001`) are still recognised. Alternate ids of one payment (Stripe session/payment intent/invoice, PayPal order/capture, Shopify numeric id vs order name) are remembered, so a later webhook is a `duplicate`. Redeliveries with the provider's delivery id (Razorpay, Whop, ClickFunnels) are dropped (`duplicate_delivery`). |
 | CRM | `crm_<integration id>_<object id>_<stage>` | Each stage of each deal counts once (webhook retries, poll after webhook). |
 | Offline | `offline_<order id>`, else a hash of the row | Same order in a later file / twice in one file → `duplicate`. |
-| Mapped webhook | value at `mapping.event_id_path`, else **random** | Without `event_id_path`, provider retries are double counted. |
+| Mapped webhook | `event_id_path` value (+ `event_id_prefix`), else `purchase_<order id>` from `order_id_path` (other event names: `<name>_<order id>`), else a hash of integration + raw body | Without an order/event id only byte-identical retries dedup. |
 
 Server dedup key = `event_id` + `event_name` per site. **The browser and server copies only dedup if
 both the id and the event name are identical.** Make the thank-you tag's order id equal the id the
-provider's webhook uses (table in §2 "Thank-you transaction_id").
+provider's webhook uses (table in §2 "Thank-you `transaction_id`").
+
+A webhook that arrives after the browser already tracked the order is a `duplicate`, but it still
+**updates TrackFlow's order record** (verified value, items, contact, visitor, status) that later refunds
+and cancellations are measured against.
 
 ### action_source (Meta)
 
 | Source | action_source |
 |---|---|
-| Checkout | `website` when a user agent is known (payload or matched visitor), else `system_generated` |
+| Checkout Purchase | `website` when a user agent is known (payload or matched visitor), else `system_generated` |
+| Lifecycle events | `system_generated` (Meta: `website` only when the event carries a user agent and URL) |
+| Mapped webhook | `website`, or `system_generated` when no URL is mapped |
 | CRM | `config.action_source`, default `system_generated` |
 | Offline | row `action_source`, default `physical_store` (rows with a Meta `lead_id` → `system_generated`) |
 
@@ -66,58 +78,92 @@ Webhook URL format: `https://<trackflow-host>/hooks/checkout/co_<token>` (return
 
 | `provider` | Secret to ask for (`secret`) | Webhook events to select | Visitor passthrough | Thank-you `transaction_id` that dedups |
 |---|---|---|---|---|
-| `stripe` | Endpoint signing secret `whsec_…` (5-min tolerance) | `checkout.session.completed`, `checkout.session.async_payment_succeeded`; optional `payment_intent.succeeded`, `invoice.paid` | `client_reference_id=<vid>` (Payment Links accept it in the URL) or `metadata.tf_vid`; PaymentIntents: `metadata.tf_vid` | Checkout Session id (`cs_…`, `{CHECKOUT_SESSION_ID}`) |
-| `paypal` | **Webhook ID** (not a secret key) | `CHECKOUT.ORDER.COMPLETED`, `PAYMENT.CAPTURE.COMPLETED` | Orders v2 `purchase_units[].custom_id=<vid>` | PayPal order id (`onApprove data.orderID`) |
-| `shopify` | Webhook signing secret (Settings → Notifications → Webhooks) or app client secret | `orders/create` **or** `orders/paid` (pick one) | Cart attribute `_tf_vid` (optional `_tf_fbc`, `_tf_fbp`, `_tf_gclid`); landing-URL click ids are read too | Order id (`checkout.order.id`), not the order name `#1001` (unless `order_id_field`) |
-| `lemonsqueezy` | Signing secret you set | `order_created` | `?checkout[custom][tf_vid]=<vid>` | Order id |
-| `paddle` | Notification destination secret `pdl_ntfset_…`; optional `api_key` to look up the customer email | `transaction.completed` | `Paddle.Checkout.open({customData:{tf_vid}})` | Transaction id `txn_…` |
-| `gumroad` | Optional: your `seller_id` | Ping (sale) | Product URL `?tf_vid=<vid>` | `sale_id` |
-| `thrivecart` | Secret word (`thrivecart_secret`) | `order.success` | `?passthrough[tf_vid]=<vid>` | `order_id` |
-| `samcart` | Optional shared secret, appended as `?secret=…` to the Notify URL | `Order` | `?tf_vid=<vid>` (decoration adds `utm_content`, which this integration also reads) | Order id |
-| `woocommerce` | Webhook secret (WooCommerce → Settings → Advanced → Webhooks) | `order.created`, `order.updated` | Order meta `_tf_vid` (developer saves the `_tf_vid` cookie on checkout) | Order id |
-| `calendly` | Webhook signing key (3-min tolerance) | `invitee.created` | Link/embed `?salesforce_uuid=<vid>` or `utm_content`/`utm_term` | Event id `calendly_<invitee uuid>` (= the `booking` recipe) |
+| `shopify` | Webhook signing secret (Settings → Notifications → Webhooks) or app client secret | `orders/create`, `orders/paid`, `orders/fulfilled`, `orders/cancelled`, `refunds/create` (one webhook each; `purchase_on` decides which one sends the Purchase) | Cart attributes `_tf_vid`, `_tf_fbc`, `_tf_fbp`, `_tf_gclid` (written by the theme tag); landing-URL click ids are read too | Order id (`checkout.order.id`; the Customer Events code uses it), not the name `#1001` (unless `order_id_field`) |
+| `woocommerce` | Webhook secret (WooCommerce → Settings → Advanced → Webhooks) | Two webhooks: **Order created** and **Order updated** (paid, completed, cancelled, refunded all arrive as updated) | Order meta `tf_vid` (+ `tf_fbc`, `tf_fbp`; older `_tf_vid` read) from the snippet in visitor-id.md; order-attribution entry URL, IP, UA read too | Order id `$order->get_id()` (or `order_id_field: "number"`) |
+| `stripe` | Endpoint signing secret `whsec_…` (5-min tolerance) | `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created`, `invoice.paid`, `customer.subscription.deleted`; optional `payment_intent.succeeded` | `client_reference_id=<vid>` (Payment Links accept it in the URL; Buy Button / Pricing Table `client-reference-id`) or `metadata.tf_vid`; PaymentIntents `metadata.tf_vid`; subscriptions `subscription_data.metadata.tf_vid` | Checkout Session id (`cs_…`, `{CHECKOUT_SESSION_ID}`) |
+| `paypal` | **Webhook ID** (not a secret key) | `CHECKOUT.ORDER.COMPLETED`, `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.CAPTURE.REVERSED`, `CUSTOMER.DISPUTE.CREATED`, `PAYMENT.SALE.COMPLETED`, `BILLING.SUBSCRIPTION.CANCELLED` | Orders v2 `purchase_units[].custom_id=<vid>`; subscriptions `custom_id` | PayPal order id (`onApprove data.orderID`) |
+| `lemonsqueezy` | Signing secret you set | `order_created`, `order_refunded`, `subscription_payment_success`, `subscription_cancelled`, `subscription_payment_refunded` | `?checkout[custom][tf_vid]=<vid>` | Order id |
+| `paddle` | Notification destination secret `pdl_ntfset_…`; optional `api_key` to look up the customer email | `transaction.completed`, `adjustment.created`, `adjustment.updated`, `subscription.canceled` | `Paddle.Checkout.open({customData:{tf_vid}})` | Transaction id `txn_…` |
+| `gumroad` | Optional: your `seller_id` | Ping (sales, recurring charges, refunded / disputed sales) | Product URL `?tf_vid=<vid>` | `sale_id` |
+| `thrivecart` | Secret word (`thrivecart_secret`) | `order.success`, `order.refund`, `order.subscription_payment`, `order.subscription_cancelled` | `?passthrough[tf_vid]=<vid>` | `order_id` |
+| `samcart` | Optional shared secret, appended as `?secret=…` to the Notify URL | Order, Refund, Partial Refund, Subscription Charged, Subscription Canceled | `?tf_vid=<vid>` (decoration adds `utm_content`, also read) | Order id |
+| `calendly` | Webhook signing key (3-min tolerance) | `invitee.created`, `invitee.canceled`, `invitee_no_show.created` | Link/embed `?salesforce_uuid=<vid>` or `utm_content`/`utm_term` | Event id `calendly_<invitee uuid>` (= the `booking` recipe) |
+| `razorpay` | Webhook secret (Dashboard → Accounts & Settings → Webhooks) | `payment.captured` (or `order.paid`), `refund.processed`, `payment.dispute.created`, `subscription.charged`, `subscription.cancelled` | `notes.tf_vid` (order or Checkout.js) | Razorpay order id (`order_…`), else payment id |
+| `clickfunnels` | Webhook endpoint secret (600-s tolerance) | `one-time-order.completed` (or `order.completed`), `one-time-order.refunded` / `order.refunded`, `subscription.invoice.paid`, `subscription.canceled` | None documented: order binding + email/phone (contact custom attribute `tf_vid` read if present) | Order id |
+| `systeme` | Webhook secret | `SALE_NEW`, `SALE_CANCELED` | None: email/phone + order binding | Order id |
+| `teachable` | Optional shared secret (`?secret=…` on the URL) | `Sale.created` (or `Transaction.created`), `Transaction.refunded`, `Sale.subscription_canceled` | None: email + order binding | Sale id |
+| `kajabi` | Optional shared secret (`?secret=…` on the URL) | Purchase / `payment.succeeded` | None: email + order binding | Transaction id |
+| `whop` | Webhook secret (Standard Webhooks) | `payment.succeeded`, `refund.created`, `dispute.created`, `membership.updated` (also `membership.deactivated`) | Checkout configuration `metadata.tf_vid` | Payment id (`pay_…`) |
 
-`list_checkout_providers` returns this live (docs link, `secret_label`, `api_label`, `events`, `passthrough`).
+`list_checkout_providers` returns this live (`docs`, `secret_label`, `api_label`, `signed`, `events`,
+`purchase_stages`, `passthrough`, and the allowed `purchase_on` values). Some payload paths of the newer
+presets (ClickFunnels, systeme.io, Teachable, Kajabi, Whop, SamCart/ThriveCart lifecycle notifications,
+Calendly no-shows) could not be verified against public samples: **run `test_checkout_payload` with a real
+sample from the provider before relying on them.**
+
+### When to send Purchase (`config.purchase_on`)
+
+| Value | Purchase is sent when | Good for |
+|---|---|---|
+| `paid` (default) | Payment is confirmed (Shopify `orders/paid` or financial status paid; Woo `processing`/`completed`; Stripe paid session) | Most stores |
+| `created` | The order exists **with payment authorized or paid** (Shopify `authorized`; otherwise same as paid) | Providers that authorise first, capture later |
+| `completed` | Fulfilled / completed (Shopify `orders/fulfilled`, Woo `completed`); providers without fulfilment treat it as paid | Only real, delivered sales (see the COD quality mode in lifecycle-events.md) |
+| `created_cod` | The order is created, **even unpaid** (Shopify `orders/create`, Woo `pending`/`on-hold`); a later cancellation sends `OrderCancelled` | Cash-on-delivery stores |
+
+Stage-aware providers: Shopify, WooCommerce, Stripe (async payments), Lemon Squeezy (order status). For the
+others the webhook itself is the paid signal. The Purchase's **event time is the time of the chosen stage**
+(paid / fulfilled / created), falling back to the order's creation time. Every order webhook updates the
+order record even when it doesn't send the Purchase (result `ignored` with "Purchase is sent when …").
 
 ### `config` keys
 
+`config` replaces the saved config as a whole on update: send the full object.
+
 | Key | Providers | Meaning |
 |---|---|---|
+| `purchase_on` | all (matters for stage-aware ones) | `paid` (default), `created`, `completed`, `created_cod` (see above). Other values are rejected. |
 | `event_name` | all | Event created (default `Purchase`; Calendly `Schedule`). |
-| `accept_test` | all | `true` = also track test/sandbox payments (default: ignored). |
+| `accept_test` | all | `true` = also track test/sandbox payments and refunds (default: ignored). |
 | `order_id_field` | stripe (`payment_intent`), shopify (`name` / `order_number`), woocommerce (`number`) | Which id becomes the order id. |
 | `default_currency`, `default_country` | all | Used when the payload has none. |
-| `renewals`, `renewal_event_name` | stripe | Track `invoice.paid` subscription renewals (default off; name default Purchase). |
+| `renewals` + `renewal_event_name` | stripe | Legacy: send `invoice.paid` renewals as that (conversion) event instead of the `SubscriptionRenewed` lifecycle event. |
 | `subscription_event_name` | stripe | Rename first subscription checkouts. |
 | `payment_intents` | stripe | Use every `payment_intent.succeeded`, not only those with `metadata.tf_vid`. |
 | `paid_statuses` | woocommerce | Default `["processing","completed"]`. |
-| `sandbox` | paddle | Mark events as test / use the sandbox API. |
+| `track_invoice_payments` | razorpay | Also track Razorpay Invoices payments (subscriptions come from `subscription.charged`). |
+| `sandbox` | paddle, razorpay | Mark events as test / use the sandbox API. |
 | `value_divisor` | thrivecart | Divide totals (ThriveCart sends hundreds). |
-| `event_types` | samcart | Notification types to use (default `["Order"]`). |
+| `event_types` | samcart | Notification types that create the Purchase (default `["Order"]`). |
 | `vid_field`, `value` | calendly | Tracking field holding the vid; fixed value per booking. |
 
-Built-in handling: Stripe amounts in minor units are converted (zero- and three-decimal currencies
-respected); unpaid sessions wait for `async_payment_succeeded`; cancelled Shopify orders, refunded/
-disputed Gumroad sales, unpaid Lemon Squeezy orders and Woo orders outside `paid_statuses` are skipped.
-An order with no vid, email, phone, IP or click id is ignored.
+Built-in handling: amounts in minor units are converted (zero- and three-decimal currencies respected);
+Stripe unpaid sessions wait for `async_payment_succeeded` (under `paid`); Shopify refunds are summed from
+successful refund transactions; cancelled/failed Woo orders become `OrderCancelled`. A Purchase with no
+vid, email, phone, IP or click id is ignored.
 
 ### Setup steps (MCP)
 
-1. Ask the customer: which provider, which event name (usually Purchase), currency if the provider
-   doesn't send one, and whether test payments should count.
-2. `list_checkout_providers` → read `secret_label` and `events`.
-3. `create_checkout_integration {"site_id": N, "provider": "stripe", "config": {"event_name": "Purchase"}}`
-   → give the customer `webhook_url` and the exact events to select in the provider dashboard.
+1. Ask the customer: which provider, when a sale should count (usually paid; cash on delivery →
+   `created_cod`), currency if the provider doesn't send one, and whether test payments should count.
+2. `list_checkout_providers` → read `secret_label`, `events`, `purchase_stages`.
+3. `create_checkout_integration {"site_id": N, "provider": "stripe", "config": {"purchase_on": "paid"}}`
+   → give the customer `webhook_url` and tell them to select **exactly** the listed events (including the
+   refund/cancel ones) in the provider dashboard.
 4. Providers that issue the secret after the endpoint exists (Stripe, Shopify…): ask them to paste it,
    then `update_checkout_integration {"integration_id": X, "secret": "<pasted>"}`. Confirm only the last
-   4 characters. **Without a secret, signature verification is off** (`signature_verification: "off"`):
-   anyone who knows the URL can post orders. Always set it.
-5. Stitching: `update_container_settings decorate_checkouts: ["stripe"]` (or the provider) + publish, or
-   give the developer the passthrough instruction from the table.
-6. `test_checkout_payload {"integration_id": X, "payload": {...}, "headers": {"x-shopify-topic": "orders/create"}}`
-   → shows `would_create` with `order_id`, `event_id`, `value`, `currency`, `vid`, `matched_by`,
-   `action_source`, `identifiers`, `click_ids` (signature not checked, nothing stored).
-7. After a real payment: `get_checkout_log` and `list_events {"origin": "webhook"}`.
+   4 characters. `signature_verification` reads `on`, `off` (signed provider without a secret: **anyone
+   with the URL can post orders**, always set it), `secret check` (Gumroad/ThriveCart/SamCart/Teachable/
+   Kajabi with a secret) or `not verified (secret URL only)`.
+5. Stitching: [visitor-id.md](visitor-id.md) (`decorate_checkouts` + publish, or the code for that
+   checkout).
+6. `test_checkout_payload {"integration_id": X, "payload": {...}, "headers": {"x-shopify-topic": "refunds/create"}}`
+   → every event it would create (Purchase or lifecycle) with `status`, `order_id`, `event_id`, `value`,
+   `partial` / `remaining_value` for refunds, `vid`, `matched_by`, `action_source`, `identifiers`,
+   `click_ids`, `event_time`, or the reason it would be ignored. Signature not checked, nothing stored.
+   Topic headers: `x-shopify-topic`, `x-wc-webhook-topic`, `x-webhook-event` (systeme.io).
+7. Refunds/cancellations reach ad platforms only with `send_lifecycle` on the destination: ask the
+   customer ([lifecycle-events.md](lifecycle-events.md)).
+8. After a real payment: `get_checkout_log` and `list_events {"origin": "webhook"}`.
 
 ```json
 {"action": "test_checkout_payload", "site_id": 12, "integration_id": 3,
@@ -134,10 +180,11 @@ An order with no vid, email, phone, IP or click id is ignored.
 | Where | Status | Meaning |
 |---|---|---|
 | Per result | `created` | Event ingested (`match_score`, `blocked` if a rule blocked it). |
-| | `duplicate` | Same payment already tracked (alternate id, or browser thank-you page / earlier webhook with the same event id). |
-| | `ignored` | `reason`: not a used event type, test mode, unpaid/cancelled, no order id, no identifier. |
-| | `would_create` | Dry run only. |
-| Log entry (`get_checkout_log`, last 100) | `ok` / `duplicate` / `ignored` | Summary of the delivery's results. |
+| | `duplicate` | Same payment/event already tracked (alternate id, or browser thank-you page / Shopify pixel / earlier webhook with the same event id). The order record is still updated (`enriched`). |
+| | `ignored` | `reason`: not a used event type, test mode, not at the `purchase_on` stage yet, no tracked Purchase for a refund, no order id, no identifier. |
+| | `would_create` / `would_skip` | Dry run only. |
+| Log entry (`get_checkout_log`, last 100) | `ok` / `duplicate` / `ignored` | Summary of the delivery's results, with an `events` list (`created: OrderRefunded refund_… 20 USD`), `delivery_id`, results. |
+| | `duplicate` + `delivery_id` | Provider redelivery of an event already processed. |
 | | `rejected` | Signature failed (provider got HTTP 400; `last_error` set). |
 | | `error` | Processing failed (HTTP 500). |
 
@@ -250,8 +297,10 @@ UTC; date-only = 12:00 UTC.
 | Unknown action source; unreadable/future date; **older than 90 days** | |
 | Duplicate order id within the file | |
 
-Other platform windows: GA4 72 h (older skipped for GA4), OpenAI 7 days, Microsoft 90 days; AppLovin,
-Taboola, Outbrain can't use offline rows (deliveries `skipped` with the reason).
+Other platform windows (older rows are `skipped` per destination with "Too old for <Platform> (max N
+days)"): GA4 72 h, TikTok/Pinterest/Reddit/OpenAI 7 days, Snapchat 37 days, LinkedIn/Google Ads/Microsoft
+90 days ([lifecycle-events.md](lifecycle-events.md) §3). AppLovin, Taboola, Outbrain can't use offline
+rows (deliveries `skipped` with the reason).
 
 ### Ways in
 
@@ -293,24 +342,73 @@ email or phone (plus the country code on phones).
 
 ---
 
-## 5. Mapped ("simple") webhooks
+## 5. Mapped ("custom") webhooks
 
-`create_webhook_integration {"event_name": "Lead", "provider": "typeform", "mapping": {...}}` → returns
-`webhook_url` (`https://<trackflow-host>/hooks/<token>`). `provider` is only a label (`stripe`,
-`calendly`, `typeform`, `shopify`, `woocommerce`, `cal`, `tally`, `generic`); the mapping does the work.
+`create_webhook_integration {"event_name": "Purchase", "provider": "generic", "mapping": {...}, "secret": "...", "signature": {...}}`
+→ returns `webhook_url` (`https://<trackflow-host>/hooks/<token>`). `provider` is a label (`stripe`,
+`calendly`, `typeform`, `shopify`, `woocommerce`, `cal`, `tally`, `generic`); the mapping does the work,
+except `cal` (Cal.com cancellations/no-shows, below). Closed schema: unknown keys are rejected.
+`update_webhook_integration` replaces `mapping` and `signature` as a whole; the URL stays the same.
 
-Mapping keys (dot paths into the JSON body): `email_path`, `phone_path`, `name_path`, `first_name_path`,
-`last_name_path`, `value_path`, `value_divisor` (100 for cents), `currency_path`, `default_currency`,
-`event_id_path` (**set it**: otherwise each retry is a new event), `event_id_prefix` (e.g. `purchase_` to match `purchase_<order id>` from the tag / checkout integration), `visitor_path` (TrackFlow vid →
-joins the journey), `url_path`, `fbc_path`, `fbp_path`, `filter_path` + `filter_value` (accept only
-matching bodies). No signature check; `update_webhook_integration` replaces `mapping` as a whole.
+### Mapping (dot paths into the JSON body)
+
+| Key | Meaning |
+|---|---|
+| `email_path`, `phone_path`, `name_path`, `first_name_path`, `last_name_path` | Contact (hashed by TrackFlow) |
+| `value_path`, `value_divisor` (100 for cents), `currency_path`, `default_currency` | Order value |
+| `order_id_path` | **Order id. Required** for new `Purchase` webhooks and whenever `status_path` / `status_map` / `refund_amount_path` is used. Event ids become `purchase_<order id>` (matches the browser tag and checkout integrations), `refund_<order id>_<refund id>`, `cancel_<order id>`; it also links refunds to the order's visitor. Saving without it → 400 with the reason. Existing webhooks keep working until you add lifecycle mapping. |
+| `event_id_path`, `event_id_prefix` | Explicit event id (wins over `order_id_path`); e.g. prefix `purchase_` |
+| `status_path` + `status_map` | Order status and what each value means: `{"paid": "purchase", "refunded": "refund", "partially_refunded": "refund", "cancelled": "cancel", "disputed": "chargeback", "pending": "ignore"}`. Values: `purchase` (creates `event_name`), `refund` (`OrderRefunded`), `cancel` / `chargeback` (`OrderCancelled`), `ignore`. Without a map, common statuses work (paid, completed, succeeded, approved, captured → purchase; refunded, partially_refunded → refund; cancelled, voided → cancel; chargeback, disputed → chargeback; pending, failed, processing → ignore); unmapped statuses are ignored. A `status_map` needs `status_path`. |
+| `refund_amount_path` | Refunded amount for partial refunds (`value_divisor` applies; without it the rest of the order is refunded) |
+| `refund_id_path` | The refund's own id (keeps two refunds of the same amount apart) |
+| `vid_path` (= `visitor_path`) | TrackFlow visitor id passed through (hidden field `tf_vid`, checkout metadata, Shopify `_tf_vid`) |
+| `landing_url_path` | Landing page URL; its ad click ids are used when no visitor matches |
+| `time_path` | When it happened (ISO, s or ms; default now) |
+| `url_path`, `fbc_path`, `fbp_path` | Page URL, Meta cookies |
+| `filter_path` + `filter_value` | Accept only bodies where the path equals the value (others → `ignored: filtered`) |
+
+Refunds and cancellations follow the checkout rules: only for orders whose Purchase was tracked, nothing
+after a full refund or cancellation, retries deduplicated ([lifecycle-events.md](lifecycle-events.md)).
+Visitors are matched by `vid_path`, then the order, email/phone, then click ids in `landing_url_path`
+([visitor-id.md](visitor-id.md)).
+
+**Cal.com** (`provider: "cal"`, `event_name: "Schedule"`): the `BOOKING_CANCELLED` trigger becomes
+`BookingCancelled` (`bookingcancel_<payload.uid>`) and `BOOKING_NO_SHOW_UPDATED` (an attendee marked
+no-show) becomes `BookingNoShow` (`noshow_<uid>`) automatically, regardless of the filter. Select those
+triggers in Cal.com too.
+
+### Verification (`secret` + `signature`)
+
+`secret` (8–200 chars) is checked as `signature.scheme` says; returned masked with `secret_set`, omit to
+keep, `""` to clear.
+
+| `signature.scheme` | Check | Fields |
+|---|---|---|
+| `trackflow` (default) | `X-TrackFlow-Signature: sha256=<hex HMAC-SHA256 of the raw body>`, or the secret itself in `X-Webhook-Secret` / `?secret=` (Zapier, Make). No secret = not verified | – |
+| `hmac` | The app's own HMAC signature in `header`; any one of several comma/space-separated signatures may match | `header`*, `algorithm` (`sha256`/`sha1`), `encoding` (`hex`/`base64`), `signed` (`body` or `timestamp.body`, the latter needs `timestamp_header`; timestamps > 5 min off are rejected), `prefix` (e.g. `sha256=`, stripped) |
+| `header_secret` | The secret in a header | `header` (default `X-Webhook-Secret`) |
+| `basic` | HTTP Basic auth; secret = `user:password` (or only the password) | – |
+| `none` | Not verified: anyone with the URL can post | – |
+
+`hmac`, `header_secret` and `basic` require a secret. Failed checks → `401`. `list_webhook_integrations`
+shows `signature`, `verified` (false = anyone with the URL can post) and `warnings` (no order/event id,
+not verified): relay them to the customer.
+
+### Dry run: `test_webhook_payload`
+
+```json
+integrations {"action": "test_webhook_payload", "site_id": 12, "integration_id": 4,
+  "payload": "{\"order\":{\"id\":\"1042\",\"status\":\"refunded\",\"total\":\"49.00\"}}",
+  "headers": {"X-Signature": "…"},
+  "mapping": {"order_id_path": "order.id", "status_path": "order.status", "value_path": "order.total"}}
+```
+
+Returns the `signature` check (`ok`, `verified`, `scheme`, `reason`) and every event it would create
+(`kind`, `event_name`, `event_id`, `custom_data`, `vid` + `matched_by`, `conversion`, `duplicate`,
+`would`: store and send / skip / reject) or `ignored` + `reason`. Pass the **raw JSON string** as `payload`
+to test an HMAC signature; `mapping` tries an unsaved mapping. Nothing is stored or sent.
 
 ---
-
-### Verification secret and dedup (mapped webhooks)
-
-- Optional `secret` (8–200 chars). When set, a request must carry `X-TrackFlow-Signature: sha256=<hex HMAC-SHA256(raw body, secret)>`, or (for Zapier/Make, which can't sign) the secret in an `X-Webhook-Secret` header or `?secret=` query. Otherwise `401`. Returned masked with `secret_set`; omit to keep, `""` to clear.
-- Always map `mapping.event_id_path` to the order/booking id. Without it, create/update return a `warnings` entry and TrackFlow dedups only byte-identical retries (id = hash of integration + raw body), so a retry with any changed field counts twice, and two truly separate but identical payloads count once.
 
 ## 6. Google Ads sign-in (OAuth)
 
@@ -343,14 +441,18 @@ with TrackFlow's redirect URI from the note). `update_destination` with `refresh
 
 | Symptom | Cause / fix |
 |---|---|
-| Purchases counted twice (thank-you tag + webhook) | Event ids differ. Thank-you tag must use `purchase_<same order id as the webhook>` (Stripe: session id `cs_…`; Shopify: order id not `#1001`; PayPal: order id). Or keep only one source. |
-| Webhook events have no ad attribution | No passthrough vid and the email isn't known from the browser. Enable `decorate_checkouts` (and publish), pass `trackflow('vid')` to the provider, or capture the email earlier (form `identify`). |
+| Purchases counted twice (thank-you tag + webhook) | Event ids differ. Thank-you tag must use `purchase_<same order id as the webhook>` (Stripe: session id `cs_…`; Shopify: numeric order id, not `#1001`; PayPal: order id; WooCommerce: `$order->get_id()`). Or keep only one source. |
+| Webhook events have no ad attribution (`matched_by` email/phone/landing_url/none) | No passthrough vid and no order binding. Set up the passthrough for that checkout ([visitor-id.md](visitor-id.md)), make the thank-you page send the Purchase with the order id, or capture the email earlier (form `identify`). |
 | Test payments not tracked | Expected: test/sandbox mode ignored unless `config.accept_test: true` (log reason says so). |
-| All webhooks `rejected` | Wrong secret type (PayPal needs the **Webhook ID**; Stripe needs the endpoint's `whsec_`, a different one per endpoint), or the secret was rotated. |
-| Shopify webhook log full of `duplicate` | Both `orders/create` and `orders/paid` registered. Same order id → same event id, so it still counts once, but register only one topic. |
+| All webhooks `rejected` | Wrong secret type (PayPal needs the **Webhook ID**; Stripe needs the endpoint's `whsec_`, a different one per endpoint), or the secret was rotated. Mapped webhook: wrong `signature` scheme/header (`test_webhook_payload` shows the reason). |
+| Shopify / WooCommerce log full of `duplicate` | Normal: several topics per order (create, paid, fulfilled) share `purchase_<order id>`; only the `purchase_on` stage sends, the rest enrich the order record. |
+| Orders `ignored` "Purchase is sent when …" | The order hasn't reached the `purchase_on` stage (e.g. unpaid COD order under `paid`). Choose `created_cod` for cash-on-delivery stores. |
+| Refund/cancel `ignored` "No tracked Purchase for order …" | The order's Purchase was never tracked (or under another order id). Align ids; refunds of untracked orders are deliberately not sent. |
+| Refunds recorded but not on the ad platform | `send_lifecycle` is off for that destination (delivery `skipped`), the platform can't take them (Snapchat, Pinterest, Quora, AppLovin; Google Ads full refunds), or too old. See [lifecycle-events.md](lifecycle-events.md). |
+| Mapped webhook rejected on save: `order_id_path is required` | New Purchase webhooks and any status/refund mapping need `mapping.order_id_path`. |
 | CRM stage changes ignored | Stage not in `stage_map` (often internal ids), or custom map without `keep_defaults`. Check `get_crm_log` reasons. |
 | CRM events ignored "No email, phone…" | Webhook carries ids only: add `api_token`, or include contact fields / `mapping`. |
 | Offline rows rejected | Purchase without value, rows >90 days, bad currency, no identifier. Always `dry_run` first. |
 | Sheet sync errors "Got an HTML page" | Sheet not public; share as "Anyone with the link" or publish to web as CSV. |
-| Mapped webhook duplicates | `event_id_path` missing. |
-| Server events never reach a destination | Destination in browser-only mode or missing server fields → event status `no_destination` (see reports-and-audit-data.md). |
+| Mapped webhook duplicates | No `order_id_path` / `event_id_path`. |
+| Server events never reach a destination | Destination in browser-only mode or missing server fields → event status `no_destination` (see reports-and-audit-data.md); or the event is older than the platform accepts ("Too old for …"). |
