@@ -1,0 +1,12 @@
+{
+  "name": "trackflow-skill",
+  "description": "TrackFlow skill: set up and audit conversion tracking (Meta Pixel + CAPI, TikTok, Google Ads, GA4 and more) through the TrackFlow MCP server.",
+  "owner": { "name": "Web Analytics Solution" },
+  "plugins": [
+    {
+      "name": "trackflow",
+      "source": "./",
+      "description": "Teach your AI agent to use TrackFlow and its MCP tools to set up error-free conversion tracking."
+    }
+  ]
+}

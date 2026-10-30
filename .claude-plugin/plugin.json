@@ -1,0 +1,9 @@
+{
+  "name": "trackflow",
+  "version": "1.0.0",
+  "description": "Teach your AI agent to use TrackFlow and its MCP tools to set up error-free conversion tracking.",
+  "author": { "name": "Web Analytics Solution" },
+  "homepage": "https://trackflow.webanalyticssolution.com",
+  "repository": "https://github.com/mnsmasum62786/trackflow-skill",
+  "license": "MIT"
+}
