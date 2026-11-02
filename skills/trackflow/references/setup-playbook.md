@@ -35,7 +35,7 @@ dashboard for something a tool can do.
      §4.1 (Settings → Customer events → Add custom pixel → Save → Connect). Turn on what it should send
      (`auto_pageview`, `ecommerce_datalayer`; extras via `shopify_events`). Add the theme tag (`auto`) too
      only for custom click/scroll/form tracking (it also writes the cart attributes for the webhook).
-     Done when `get_site` shows `shopify_pixel_detected: true` (after 3 different visitors).
+     Done when `list_events` shows the store's events (`get_site` shows `shopify_pixel_detected: true` only after 3 different visitors, so a dev store with one tester may never show it; tracking doesn't depend on it).
    - Other sites: `install → get_install_snippet`. Choose the mode:
      - `standard`: classic tag, JS function `trackflow(...)`. Simplest for sites where you will add
        on-page code.

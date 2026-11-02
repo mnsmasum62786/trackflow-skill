@@ -139,8 +139,8 @@ Full step-by-step version with checklists: [references/setup-playbook.md](refere
    **Shopify:** the main install is the Customer Events code (`get_install_snippet` mode `shopify_pixel`,
    pasted under Settings → Customer events → Add custom pixel); it covers checkout and thank-you pages,
    sends what `auto_pageview` / `ecommerce_datalayer` / `shopify_events` allow, and `get_site` shows
-   `shopify_pixel_detected`. The theme tag is optional (custom click/form tags, cart attributes); it skips
-   the events the pixel sends.
+   `shopify_pixel_detected`. The theme tag is optional (custom click/form tags, cart attributes). With both
+   installed, each page view is still sent once and funnel events come only from the pixel.
 3. **Understand the site:** `inspect_site` per page type, `get_tagging_reference`, then `list_tags`,
    `list_tag_triggers`, `list_variables` for what already exists.
 4. **Agree the plan** in one or two sentences: which events, from which pages, to which platforms.

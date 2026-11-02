@@ -210,8 +210,19 @@ it up; the theme tag is optional.
    **`purchase_<numeric Shopify order id>`**, the same id the order webhook uses. The pixel can't see
    clicks, scrolling or theme forms precisely (sandbox): published click/form tags run only if their
    trigger and conditions use data the sandbox has (simple `#id` / `[attr]` selectors, no click text).
-4. **Check detection:** `get_site` → `shopify_pixel_detected: true` / `shopify_pixel_seen_at` once the
-   code has sent events from **3 different visitors** in the last 14 days. Then `list_events`.
+4. **Check it:** `list_events` shows the events. `get_site` → `shopify_pixel_detected: true` /
+   `shopify_pixel_seen_at` appear once the code has sent events from **3 different visitors** in the last
+   14 days; nothing below depends on that, so a dev store with one tester works the same.
+5. **With the theme tag too, nothing is counted twice:**
+   - **PageView, one per page load:** the theme tag owns it (and all container tags) on pages it runs on. It
+     writes cookie `_tf_th` as soon as it loads; the pixel finds it and stays silent. The pixel owns checkout,
+     where the theme can't run. If it saw `_tf_th` earlier but not for this page, it waits up to 2 s, then
+     takes over (theme tag blocked or removed). If the pixel fires first it leaves `_tf_pv` and the theme tag
+     drops its copy. With `consent_mode`, only a page view the theme really sent counts as owned.
+   - **Funnel events:** only from the pixel. The theme tag drops them when the pixel is known (`_tf_px` cookie
+     in this browser, or `settings.shopify_pixel` from the server).
+   - **Reloads:** flagged on both sides, so `block_reloads` applies with the pixel alone too.
+   - **Variant picker / filters:** on Shopify a query-string change isn't a new page view.
 
 ### 4.2 Order webhook (backup: missed purchases, refunds, cancellations)
 
