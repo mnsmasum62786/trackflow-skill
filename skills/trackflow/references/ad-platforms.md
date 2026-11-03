@@ -6,7 +6,7 @@ tracking modes, what the browser tag and the server API do, dedup, when TrackFlo
 All IDs below are placeholders.
 
 Platforms (MCP `type`): `meta` · `tiktok` · `google_ads` · `ga4` · `microsoft` · `snapchat` · `pinterest` · `linkedin` ·
-`reddit` · `x` · `quora` · `taboola` · `outbrain` · `spotify` · `nextdoor` · `applovin` · `openai`
+`reddit` · `x` · `quora` · `taboola` · `outbrain` · `nextdoor` · `openai`
 
 ---
 
@@ -52,8 +52,8 @@ Every platform has the advanced checkbox `send_lifecycle` ("Send refunds and can
 On: lifecycle events from webhooks (`OrderRefunded`, `OrderCancelled`, `SubscriptionRenewed`, `SubscriptionCancelled`,
 `BookingCancelled`, `BookingNoShow`) are delivered: GA4 `refund`; Google Ads partial-refund restatement (full refunds
 not possible); custom events on Meta, TikTok, Reddit, OpenAI, Microsoft and the custom webhook; Outbrain/Taboola named
-conversions with a click id; LinkedIn, X, Spotify, Nextdoor only when mapped; never Snapchat, Pinterest, Quora,
-AppLovin. Set it only when the customer asks. Full table and per-platform max event ages:
+conversions with a click id; LinkedIn, X, Nextdoor only when mapped; never Snapchat, Pinterest, Quora.
+Set it only when the customer asks. Full table and per-platform max event ages:
 [lifecycle-events.md](lifecycle-events.md).
 
 ### Which events a destination receives (`event_filter`, `event_list`)
@@ -89,7 +89,7 @@ By default every destination receives every event. Each destination can instead 
 | Nextdoor | `test_event` | |
 | OpenAI | `validate_only` | |
 | Quora | `debug` | **events still processed live** |
-| LinkedIn, X, Microsoft, Spotify, AppLovin, Taboola, Outbrain | — | test events are skipped for these |
+| LinkedIn, X, Microsoft, Taboola, Outbrain | — | test events are skipped for these |
 
 While a test field is set, **all** server events for that destination are test/validation-only.
 
@@ -107,8 +107,6 @@ would arrive undeduplicated; TrackFlow turns those off or works around them:
 | GA4 | gtag `config` sends page_view (+ enhanced measurement history events **[vendor]**) | configures the ID with `send_page_view: false` and sends `page_view` itself; if the site already configures the same `G-` ID, TrackFlow leaves page views to the site |
 | Microsoft UET | auto SPA tracking | **keeps** UET's `enableAutoSpaTracking: true` (UET records page loads); TrackFlow's PageView is a no-op in the browser and skipped server-side while the tag loads |
 | Quora | `qevents.js` pushState ViewContent | `qp.disablePushState = true`; PageView → ViewContent with `event_id`, browser only |
-| Spotify | `autoView` on load + history | `autoView: false`; PageView → `view` with `event_id` |
-| AppLovin | `autoSpaPageView` | `historyObserver: false`; `page_view` with `dedupe_id` |
 | Outbrain | `obtp.js` tracks PAGE_VIEW on every history change | sends PAGE_VIEW only for the landing page; vendor handles the rest (pixel only) |
 | LinkedIn | Insight Tag records the page view on load | the first PageView's ID is set as `_linkedin_event_id`; later routes only fire if PageView is mapped to a conversion |
 | X | `twq('config')` records Site Visit | Site Visit is browser-only; PageView sent only if mapped in `event_ids` |
@@ -120,7 +118,7 @@ would arrive undeduplicated; TrackFlow turns those off or works around them:
 
 - Remove hand-installed copies of a pixel TrackFlow loads (theme code, plugins, GTM tags, Shopify/Wix channel apps):
   different event IDs → double counting. Alternative: put that destination in `server` mode.
-- One pixel per page for Reddit, Spotify and AppLovin: a second destination of the same type runs server-only.
+- One pixel per page for Reddit: a second destination of the same type runs server-only.
   Quora `qp('track')` and Outbrain `obApi` report to **every** pixel/marketer ID on the page.
 - Bot user agents and reloaded PageViews (settings `block_bots`, `block_reloads`) are skipped by both the tags and the server.
 - With `consent_mode` on, nothing (cookies, pixels, events) runs until marketing consent; TrackFlow reads Cookiebot,
@@ -404,21 +402,6 @@ Outbrain Pixel (`obApi`) + S2S postback (`GET tr.outbrain.com/unifiedPixel`). Mo
 - **Server:** `ob_click_id`, `name`, `orderValue` + `currency` (USD CAD EUR GBP ILS AUD MXN BRL SEK SGD RUB NZD INR JPY PHP
   CHF MYR only), `orderId`, `timestamp` (if > 5 min old). PAGE_VIEW pixel only.
 
-## Spotify Ads — `spotify`
-
-Spotify Pixel (`spdt`) + Conversions API (`capi.spotify.com/capi-direct/events/`, Bearer).
-
-| Key | Label | Need | Where to find |
-|---|---|---|---|
-| `pixel_id` | Pixel key | browser | Ads Manager → Events → your pixel: key in `spdt('conf', {key})` |
-| `capi_connection_id` | CAPI connection ID (UUID) | server | Ads Manager → Events → Connect Data Source → Conversions API |
-| `access_token` | CAPI token (secret) | server | same screen → Generate Token (no expiry, up to 3 per connection) |
-| `custom_events` | Custom event slots | mapping | `Contact=1` — slots 1–5 for non-standard events; unlisted not sent |
-
-- Standard: PageView VIEW, ViewContent PRODUCT, AddToCart ADD_TO_CART, InitiateCheckout CHECK_OUT, Purchase PURCHASE,
-  Lead LEAD, CompleteRegistration SIGN_UP. Dedup by `event_id`. One pixel per page.
-- **Skips:** server event without IP, email or phone. Server sends `event_details` (amount, currency, content_name/category).
-
 ## Nextdoor — `nextdoor`
 
 Universal Pixel (`ndp`) + Conversions API (`ads.nextdoor.com/v2/api/conversions/track`, Bearer, `partner_id: "TrackFlow"`).
@@ -434,20 +417,6 @@ Universal Pixel (`ndp`) + Conversions API (`ads.nextdoor.com/v2/api/conversions/
 - Dedup: `event_id` on the same pixel/data_source_id. `?ndclid=` captured → `customer.click_id`.
 - **Gotchas:** `order_value` is sent as `"USD12.34"` and only when currency is present. **Phone is never sent** (Nextdoor
   hashes 10 digits without country code).
-
-## AppLovin (Axon) — `applovin`
-
-Axon Pixel (`axon`) + Axon Conversion API (`b.applovin.com/v1/event?pixel_id=…`, `Authorization: <key>`).
-
-| Key | Label | Need | Where to find |
-|---|---|---|---|
-| `pixel_id` | Event key | always | Axon Ads Manager → Account → Keys: Event Key (`AXON_EVENT_KEY`) |
-| `access_token` | Conversion API key (secret) | server | same Keys page (ask your AppLovin rep if missing) |
-
-- Events: page_view, view_item, add_to_cart, begin_checkout, add_payment_info, purchase (transaction_id, shipping, tax),
-  generate_lead, sign_up, search, subscribe. **No custom events** (others not sent). Dedup `dedupe_id` (30 s merge, > 5 min dropped).
-- **Skips:** no page URL (`event_source_url` required → most offline/CRM events skipped); no IP **and** UA; no
-  client_id/axwrt/alart/email/phone. One pixel per page.
 
 ## OpenAI (ChatGPT Ads) — `openai`
 

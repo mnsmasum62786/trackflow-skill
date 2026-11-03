@@ -73,8 +73,8 @@ Purchase.
 | **Microsoft Ads** | UET custom events with action `order_refunded` / `order_cancelled` (or your override), positive value; restating/retracting needs the Microsoft Advertising API, which TrackFlow doesn't use. Within 90 days. |
 | **Custom destination (webhook)** | Forwarded like any event; `custom_data.lifecycle` says which kind. |
 | **Outbrain, Taboola** | Named conversions (Outbrain `OrderRefunded`…, Taboola `order_refunded`…, or your mapped names), positive value, no order id, **only for visitors with that network's click id**. Create the conversions and keep them out of optimisation. |
-| **LinkedIn, X, Spotify, Nextdoor** | Only when the event name is mapped (LinkedIn Conversions API rule ids, X event ids, Spotify custom slots, Nextdoor custom conversion slots, e.g. `OrderRefunded=3`). Otherwise skipped with the reason. |
-| **Snapchat, Pinterest, Quora, AppLovin** | Always skipped (fixed event lists, no named custom events). Leave `send_lifecycle` off. |
+| **LinkedIn, X, Nextdoor** | Only when the event name is mapped (LinkedIn Conversions API rule ids, X event ids, Nextdoor custom conversion slots, e.g. `OrderRefunded=3`). Otherwise skipped with the reason. |
+| **Snapchat, Pinterest, Quora** | Always skipped (fixed event lists, no named custom events). Leave `send_lifecycle` off. |
 
 ---
 

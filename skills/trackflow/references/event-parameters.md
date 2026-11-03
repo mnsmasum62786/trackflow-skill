@@ -50,28 +50,28 @@ Ways events enter TrackFlow (all go through the same pipeline):
 ## 2. Event name mapping (TrackFlow → platform)
 
 Browser and server copies always get the **same** translated name, so dedup works. "—" = not sent to that platform
-(skipped on both sides). "slot" = only sent if you assign it a custom slot in `custom_events` (Spotify 1–5, Nextdoor 1–10). "snake_case" = the TrackFlow name converted (`StartTrial` → `start_trial`).
+(skipped on both sides). "slot" = only sent if you assign it a custom slot in `custom_events` (Nextdoor 1–10). "snake_case" = the TrackFlow name converted (`StartTrial` → `start_trial`).
 
-| TrackFlow | Meta | TikTok | GA4 | Microsoft (UET action) | Snapchat | Pinterest API (Tag) | Reddit (pixel) | Quora | AppLovin | OpenAI | Spotify CAPI (pixel) | Nextdoor CAPI (pixel = UPPER) | Taboola (default) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PageView | PageView | `Pageview` ¹ | `page_view` | pageLoad ² | `PAGE_VIEW` | `page_visit` (`pagevisit`) | `PAGE_VISIT` (`PageVisit`) | `ViewContent` (browser only) | `page_view` | `page_viewed` | `VIEW` (`view`) | `page_view` | `page_view` (browser only) |
-| ViewContent | ViewContent | ViewContent | `view_item` | `view_item` | `VIEW_CONTENT` | `view_content` | `VIEW_CONTENT` | ViewContent | `view_item` | `contents_viewed` | `PRODUCT` (`product`) | `view_content` | `view_content` |
-| Search | Search | Search | `search` | `search` | `SEARCH` | `search` | `SEARCH` | Search | `search` | custom `search` | slot | `search` | `search` |
-| AddToCart | AddToCart | AddToCart | `add_to_cart` | `add_to_cart` | `ADD_CART` | `add_to_cart` | `ADD_TO_CART` | AddToCart | `add_to_cart` | `items_added` | `ADD_TO_CART` (`addtocart`) | `add_to_cart` | `add_to_cart` |
-| AddToWishlist | AddToWishlist | AddToWishlist | `add_to_wishlist` | `add_to_wishlist` | `ADD_TO_WISHLIST` | `add_to_wishlist` | `ADD_TO_WISHLIST` | AddToWishlist | — | custom | slot | `add_to_wishlist` | snake_case |
-| InitiateCheckout | InitiateCheckout | InitiateCheckout | `begin_checkout` | `begin_checkout` | `START_CHECKOUT` | `initiate_checkout` | CUSTOM | InitiateCheckout | `begin_checkout` | `checkout_started` | `CHECK_OUT` (`checkout`) | `initiate_checkout` | `start_checkout` |
-| AddPaymentInfo | AddPaymentInfo | AddPaymentInfo | `add_payment_info` | `add_payment_info` | `ADD_BILLING` | `add_payment_info` | CUSTOM | AddPaymentInfo | `add_payment_info` | custom | slot | slot | snake_case |
-| Purchase | Purchase | `CompletePayment` | `purchase` | `purchase` | `PURCHASE` | `checkout` | `PURCHASE` | Purchase | `purchase` | `order_created` | `PURCHASE` | `purchase` | `make_purchase` |
-| Lead | Lead | Lead | `generate_lead` | `generate_lead` | `SIGN_UP` | `lead` | `LEAD` | `GenerateLead` | `generate_lead` | `lead_created` | `LEAD` | `lead` | `lead` |
-| CompleteRegistration | CompleteRegistration | CompleteRegistration | `sign_up` | `sign_up` | `SIGN_UP` | `signup` | `SIGN_UP` (`SignUp`) | CompleteRegistration | `sign_up` | `registration_completed` | `SIGN_UP` (`signup`) | `sign_up` | `complete_registration` |
-| Contact | Contact | Contact | `contact` | `contact` | — | `contact` | CUSTOM | Generic | — | custom | slot | slot | snake_case |
-| Schedule | Schedule | Schedule | `schedule` | `schedule` | `RESERVE` | `schedule` | CUSTOM | Generic | — | `appointment_scheduled` | slot | slot | snake_case |
-| StartTrial | StartTrial | StartTrial | `start_trial` | `start_trial` | `START_TRIAL` | `start_trial` | CUSTOM | Generic | — | `trial_started` | slot | slot | snake_case |
-| Subscribe | Subscribe | Subscribe | `subscribe` | `subscribe` | `SUBSCRIBE` | `subscribe` | CUSTOM | Generic | `subscribe` | `subscription_created` | slot | `subscribe` | snake_case |
-| SubmitApplication | SubmitApplication | SubmitApplication | `submit_application` | `submit_application` | `SIGN_UP` | `submit_application` | CUSTOM | Generic | — | custom | slot | slot | snake_case |
-| CustomizeProduct / FindLocation | same | same (custom) | snake_case | snake_case | — | `customize_product` / `find_location` | CUSTOM | Generic | — | custom | slot | slot | snake_case |
-| Donate | Donate | Donate (custom) | `donate` | `donate` | — | `custom` | CUSTOM | Generic | — | custom | slot | slot | snake_case |
-| Custom name (e.g. `VideoWatched`) | custom event, same name | same name (custom) | `video_watched` | `video_watched` | — (unless a Snap name e.g. `CUSTOM_EVENT_1`, `LOGIN`) | `custom` | `CUSTOM` + `custom_event_name` | Generic (or skip) | — | `custom` + `custom_event_name: video_watched` | `CUSTOM_EVENT_n` if slotted | `custom_conversion_n` if slotted | `video_watched` (or skip) |
+| TrackFlow | Meta | TikTok | GA4 | Microsoft (UET action) | Snapchat | Pinterest API (Tag) | Reddit (pixel) | Quora | OpenAI | Nextdoor CAPI (pixel = UPPER) | Taboola (default) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PageView | PageView | `Pageview` ¹ | `page_view` | pageLoad ² | `PAGE_VIEW` | `page_visit` (`pagevisit`) | `PAGE_VISIT` (`PageVisit`) | `ViewContent` (browser only) | `page_viewed` | `page_view` | `page_view` (browser only) |
+| ViewContent | ViewContent | ViewContent | `view_item` | `view_item` | `VIEW_CONTENT` | `view_content` | `VIEW_CONTENT` | ViewContent | `contents_viewed` | `view_content` | `view_content` |
+| Search | Search | Search | `search` | `search` | `SEARCH` | `search` | `SEARCH` | Search | custom `search` | `search` | `search` |
+| AddToCart | AddToCart | AddToCart | `add_to_cart` | `add_to_cart` | `ADD_CART` | `add_to_cart` | `ADD_TO_CART` | AddToCart | `items_added` | `add_to_cart` | `add_to_cart` |
+| AddToWishlist | AddToWishlist | AddToWishlist | `add_to_wishlist` | `add_to_wishlist` | `ADD_TO_WISHLIST` | `add_to_wishlist` | `ADD_TO_WISHLIST` | AddToWishlist | custom | `add_to_wishlist` | snake_case |
+| InitiateCheckout | InitiateCheckout | InitiateCheckout | `begin_checkout` | `begin_checkout` | `START_CHECKOUT` | `initiate_checkout` | CUSTOM | InitiateCheckout | `checkout_started` | `initiate_checkout` | `start_checkout` |
+| AddPaymentInfo | AddPaymentInfo | AddPaymentInfo | `add_payment_info` | `add_payment_info` | `ADD_BILLING` | `add_payment_info` | CUSTOM | AddPaymentInfo | custom | slot | snake_case |
+| Purchase | Purchase | `CompletePayment` | `purchase` | `purchase` | `PURCHASE` | `checkout` | `PURCHASE` | Purchase | `order_created` | `purchase` | `make_purchase` |
+| Lead | Lead | Lead | `generate_lead` | `generate_lead` | `SIGN_UP` | `lead` | `LEAD` | `GenerateLead` | `lead_created` | `lead` | `lead` |
+| CompleteRegistration | CompleteRegistration | CompleteRegistration | `sign_up` | `sign_up` | `SIGN_UP` | `signup` | `SIGN_UP` (`SignUp`) | CompleteRegistration | `registration_completed` | `sign_up` | `complete_registration` |
+| Contact | Contact | Contact | `contact` | `contact` | — | `contact` | CUSTOM | Generic | custom | slot | snake_case |
+| Schedule | Schedule | Schedule | `schedule` | `schedule` | `RESERVE` | `schedule` | CUSTOM | Generic | `appointment_scheduled` | slot | snake_case |
+| StartTrial | StartTrial | StartTrial | `start_trial` | `start_trial` | `START_TRIAL` | `start_trial` | CUSTOM | Generic | `trial_started` | slot | snake_case |
+| Subscribe | Subscribe | Subscribe | `subscribe` | `subscribe` | `SUBSCRIBE` | `subscribe` | CUSTOM | Generic | `subscription_created` | `subscribe` | snake_case |
+| SubmitApplication | SubmitApplication | SubmitApplication | `submit_application` | `submit_application` | `SIGN_UP` | `submit_application` | CUSTOM | Generic | custom | slot | snake_case |
+| CustomizeProduct / FindLocation | same | same (custom) | snake_case | snake_case | — | `customize_product` / `find_location` | CUSTOM | Generic | custom | slot | snake_case |
+| Donate | Donate | Donate (custom) | `donate` | `donate` | — | `custom` | CUSTOM | Generic | custom | slot | snake_case |
+| Custom name (e.g. `VideoWatched`) | custom event, same name | same name (custom) | `video_watched` | `video_watched` | — (unless a Snap name e.g. `CUSTOM_EVENT_1`, `LOGIN`) | `custom` | `CUSTOM` + `custom_event_name` | Generic (or skip) | `custom` + `custom_event_name: video_watched` | `custom_conversion_n` if slotted | `video_watched` (or skip) |
 
 ¹ TikTok browser uses `ttq.page()` (no event ID) → server PageView is skipped while the pixel loads.
 ² Microsoft: UET records page loads itself; server PageView skipped while the tag loads.
@@ -83,7 +83,6 @@ Mapping-only platforms (no name translation; you map each TrackFlow event to an 
 | Google Ads | `conversion_labels` (`Purchase=AbC-D_efG123`) | `conversion_actions` (`Purchase=987654321`) | one `Event=value` per line, comma/semicolon list or JSON; event lookup is case-insensitive |
 | LinkedIn | `conversion_ids` (Insight Tag "Event-specific" conversion IDs) | `conversion_rules` (Conversions-API rule IDs or `urn:lla:llaPartnerConversion:<id>`) | same |
 | X | `event_ids` (shared by pixel and API) | `event_ids` | `Event=tw-<pixel>-<event>` |
-| Spotify | `custom_events` (`Contact=1`) slots 1–5 for non-standard events | same | slot number |
 | Nextdoor | `custom_events` slots 1–10 | same | slot number |
 | Taboola / Outbrain | `event_names` overrides (case-sensitive names configured in Realize / Amplify) | same | `Purchase=make_purchase` |
 | Microsoft | `event_actions` overrides (`Lead=submit_lead_form`) | same | — |
@@ -108,7 +107,7 @@ Empty values (`""`, `null`) are dropped before sending.
 | `content_ids` | string[] | Product IDs / SKUs; match catalog IDs for catalog/dynamic ads. Used to build items when `contents` is absent (quantity 1). |
 | `contents` | `[{id, quantity, item_price}]` | Preferred item list (wins over `content_ids`). `item_price` = unit price. |
 | `content_type` | string | `product` or `product_group`. |
-| `content_name` | string | Product/page name (single-item name on GA4, AppLovin, OpenAI, Microsoft, Spotify). |
+| `content_name` | string | Product/page name (single-item name on GA4, OpenAI, Microsoft). |
 | `content_category` | string | Category. |
 | `num_items` | number | Total quantity; computed from `contents` quantities when absent (Snap, Pinterest, Reddit, Taboola, X). |
 | `order_id` | string | Order reference. **Drives transaction-ID dedup** (Google Ads, GA4, Taboola, Snap/Pinterest/Reddit order fields). |
@@ -116,7 +115,6 @@ Empty values (`""`, `null`) are dropped before sending.
 | `status` | string | Registration status (Snapchat, X browser). |
 | `predicted_ltv` | number | Snapchat, Pinterest. |
 | `plan_id` | string | OpenAI subscription/trial and custom events. |
-| `shipping`, `tax` | number | AppLovin purchases (default 0). |
 | any other key | — | **Sent verbatim to Meta only** (Meta passes the whole `custom_data`); other platforms ignore unknown keys. |
 
 ---
@@ -134,13 +132,13 @@ Empty values (`""`, `null`) are dropped before sending.
 | order_id | as sent | `order_id` | `transactionId` = order_id ‖ event_id | `transaction_id` (Purchase: order_id ‖ event_id) | `transactionId` | `order_id` | `order_id` |
 | search_string | as sent | `query` | — | `search_term` | `searchTerm` | `search_string` | `search_string` |
 
-| TrackFlow | LinkedIn | Reddit | X | Quora | Taboola S2S | Outbrain S2S | Spotify | Nextdoor | AppLovin | OpenAI |
-|---|---|---|---|---|---|---|---|---|---|---|
-| value | `conversionValue.amount` (only with currency) | `metadata.value` | `value` (2-dec string) | `conversion.value` (**account currency, no currency sent**) | `revenue` | `orderValue` | `event_details.amount` | `custom.order_value` = `USD12.34` (needs currency) | `data.value` | `data.amount` (**integer minor units**) |
-| currency | `currencyCode` | `metadata.currency` | `price_currency` | — | `currency` (supported list only) | `currency` (supported list only) | `currency` | in `order_value` | `data.currency` | `data.currency` (required for amount) |
-| items | — | `metadata.products[{id, quantity, item_price, category}]`, `item_count` | `contents[{content_id, content_price, num_items}]`, `number_items` | — | `quantity` | — | `content_name` (1 item) | `product_context[{id, quantity, item_price}]` | `data.items[{item_id, quantity, price}]` | `data.contents[{id, quantity, amount, currency}]` ≤ 50 |
-| order_id | — | `metadata.order_id` | — | — | `orderid` = order_id ‖ event_id | `orderId` | — | `custom.order_id` | `transaction_id` = order_id ‖ event_id | — |
-| search_string | — | — | `description: "search: …"` | — | — | — | — | — | `search_term` | — |
+| TrackFlow | LinkedIn | Reddit | X | Quora | Taboola S2S | Outbrain S2S | Nextdoor | OpenAI |
+|---|---|---|---|---|---|---|---|---|
+| value | `conversionValue.amount` (only with currency) | `metadata.value` | `value` (2-dec string) | `conversion.value` (**account currency, no currency sent**) | `revenue` | `orderValue` | `custom.order_value` = `USD12.34` (needs currency) | `data.amount` (**integer minor units**) |
+| currency | `currencyCode` | `metadata.currency` | `price_currency` | — | `currency` (supported list only) | `currency` (supported list only) | in `order_value` | `data.currency` (required for amount) |
+| items | — | `metadata.products[{id, quantity, item_price, category}]`, `item_count` | `contents[{content_id, content_price, num_items}]`, `number_items` | — | `quantity` | — | `product_context[{id, quantity, item_price}]` | `data.contents[{id, quantity, amount, currency}]` ≤ 50 |
+| order_id | — | `metadata.order_id` | — | — | `orderid` = order_id ‖ event_id | `orderId` | `custom.order_id` | — |
+| search_string | — | — | `description: "search: …"` | — | — | — | — | — |
 
 ---
 
@@ -167,13 +165,12 @@ Platform-specific hash variants TrackFlow derives automatically (you send plain 
 
 | Variant | Rule | Used by |
 |---|---|---|
-| `em` | trim + lowercase | Meta, TikTok, Snapchat, Pinterest, LinkedIn, X, Spotify, Nextdoor, OpenAI |
+| `em` | trim + lowercase | Meta, TikTok, Snapchat, Pinterest, LinkedIn, X, Nextdoor, OpenAI |
 | `em_g` | gmail/googlemail: dots removed from local part | Google Ads, GA4 |
 | `em_r` | all domains: dots and `+tag` removed | Reddit, Microsoft |
-| `em_gp` | gmail/googlemail: dots and `+tag` removed | Quora, AppLovin |
-| `ph` | digits with country code, no `+` | Meta, TikTok, Snapchat, Pinterest, Spotify, AppLovin, OpenAI |
+| `em_gp` | gmail/googlemail: dots and `+tag` removed | Quora |
+| `ph` | digits with country code, no `+` | Meta, TikTok, Snapchat, Pinterest, OpenAI |
 | `ph_e164` | SHA-256 of `+<digits>` | Google Ads, GA4, Microsoft, Reddit, X |
-| `ph_last10` | last 10 digits | AppLovin |
 
 Server-side identifier coverage per platform:
 
@@ -190,14 +187,12 @@ Server-side identifier coverage per platform:
 | Reddit | email (em_r), phone (e164), external_id | IP, UA, `_rdt_uuid`, click id (none for physical_store) |
 | X | email, phone (e164) | twclid, `_twpid`, IP + UA |
 | Quora | email only (phone/name/geo not sent) | IP, UA, referrer, qclid |
-| Spotify | email, phone | IP |
 | Nextdoor | email fn ln ct st zp country db ge external_id (**no phone**) | IP, UA, ndclid |
-| AppLovin | email (em_gp), phone, phone last 10 | IP, UA, aleid, alart, axwrt, visitor id |
 | OpenAI | email, phone, external_id, fn, ln (geo browser-only) | IP, UA, oppref, obref |
 | Taboola / Outbrain | none (click-ID postback only) | tblci / ob_click_id |
 
 Browser side: the tracker keeps identified user data **raw in the visitor's own browser storage** and passes it to pixels
-for advanced matching; the pixels hash it themselves (Meta, TikTok, Snap, Reddit, X, Nextdoor, AppLovin, Microsoft, Google
+for advanced matching; the pixels hash it themselves (Meta, TikTok, Snap, Reddit, X, Nextdoor, Microsoft, Google
 enhanced conversions, Pinterest email, Quora email on init). OpenAI and Taboola get browser-side SHA-256 hashes.
 Auto form capture (site setting `auto_forms`) reads email/phone/name/city/state/zip/country fields and never password,
 card, CVC, IBAN, SSN or similar fields.
@@ -213,8 +208,8 @@ TrackFlow fills these itself — do not ask the user for them:
 | IP, user agent | the browser request (server API: `ip`, `user_agent`) — sent **unhashed** |
 | `fbp` | `_fbp` cookie (the tracker creates it if missing) |
 | `fbc` | `_fbc` cookie, or built from `?fbclid=` as `fb.1.<ms>.<fbclid>` |
-| landing-URL click IDs, kept 90 days as first-party cookies | `gclid gbraid wbraid dclid msclkid ttclid ScCid epik twclid rdt_cid li_fat_id qclid obclid tblci irclickid oppref ndclid aleid alart OutbrainClickId` |
-| pixel cookies read by plugins | `_ttp`, `_scid`, `_epik`, `_uetvid`, `_rdt_uuid`/`_rdt_cid`, `_twclid`/`_twpid`, `li_fat_id`, `quora_qclid`, `_axeid`/`_axart`/`_axwrt`, `__oppref`/`__obref`, `_ga` client/session id, gclid from gtag |
+| landing-URL click IDs, kept 90 days as first-party cookies | `gclid gbraid wbraid dclid msclkid ttclid ScCid epik twclid rdt_cid li_fat_id qclid obclid tblci irclickid oppref ndclid OutbrainClickId` |
+| pixel cookies read by plugins | `_ttp`, `_scid`, `_epik`, `_uetvid`, `_rdt_uuid`/`_rdt_cid`, `_twclid`/`_twpid`, `li_fat_id`, `quora_qclid`, `__oppref`/`__obref`, `_ga` client/session id, gclid from gtag |
 | `external_id` | hashed TrackFlow visitor ID when you send none |
 | page URL, referrer | `event_source_url` / `page_location` etc. (raw) |
 
@@ -236,11 +231,11 @@ inside `click_ids`; top-level wins.
 | **CompleteRegistration** | — | `em`, `ph`, `external_id` (your user ID); `status` optional | Snapchat/Reddit/GA4 treat it as sign-up. |
 | **AddToCart** | `content_ids`/`contents` | `value`, `currency`, `content_type`, `num_items` | Value = price × qty added. |
 | **InitiateCheckout** | — | `value`, `currency`, `contents`, `num_items` | |
-| **AddPaymentInfo** | — | `value`, `currency` | Snap `ADD_BILLING`; Reddit as CUSTOM; Spotify/Nextdoor only via a custom slot. |
+| **AddPaymentInfo** | — | `value`, `currency` | Snap `ADD_BILLING`; Reddit as CUSTOM; Nextdoor only via a custom slot. |
 | **ViewContent** | `content_ids` (catalog ads) | `content_type`, `content_name`, `content_category`, `value`, `currency` | |
 | **Search** | `search_string` | — | |
 | **Subscribe / StartTrial** | — | `value`, `currency`, `predicted_ltv` (Snap/Pinterest), `plan_id` (OpenAI) | |
-| **Contact / Schedule / SubmitApplication** | — | `em`/`ph` | Limited coverage: not on Snap (Contact), AppLovin; Spotify/Nextdoor need a custom slot; Quora sends Generic. |
+| **Contact / Schedule / SubmitApplication** | — | `em`/`ph` | Limited coverage: not on Snap (Contact); Nextdoor needs a custom slot; Quora sends Generic. |
 | **Custom events** | — | keep names stable, PascalCase or snake_case, ≤ 40 chars (GA4 limit) | See §11. |
 
 Value rule of thumb: send `value` + `currency` **together on every event that has money attached**; never only one.
@@ -295,8 +290,7 @@ and server `event_id` let you use the order ID. Use the **same ID string** on ev
 | Quora | `event_id` | PageView browser-only. |
 | Taboola | event name within click (`tblci`) context + `orderid` | S2S copy kept; S2S needs `tblci`. |
 | Outbrain | none exists | each event sent one way: with Outbrain click ID → S2S only; without → pixel only. |
-| Spotify / Nextdoor / OpenAI | `event_id` (OpenAI keeps the first copy) | |
-| AppLovin | `dedupe_id` | merged within 30 s; a copy > 5 min later is dropped. |
+| Nextdoor / OpenAI | `event_id` (OpenAI keeps the first copy) | |
 
 `retry_event_delivery` re-sends a stored event to every enabled destination; safe for ID-deduped platforms, but avoid
 retrying already-delivered events to GA4 / Taboola / Outbrain (no event-ID dedup).
@@ -345,7 +339,7 @@ Platform limits checked by TrackFlow before every server delivery (older events 
 | Nextdoor | `test_event` | marked as test |
 | OpenAI | `validate_only` | checked, not saved |
 | Quora | `debug` | **warnings only — events are still processed live** |
-| LinkedIn, X, Microsoft, Spotify, AppLovin, Taboola, Outbrain | none | test events never sent; verify with real traffic or the platform's own debugger |
+| LinkedIn, X, Microsoft, Taboola, Outbrain | none | test events never sent; verify with real traffic or the platform's own debugger |
 
 ---
 
@@ -355,8 +349,8 @@ Platform limits checked by TrackFlow before every server delivery (older events 
 - Custom names reach: Meta (custom event — **[vendor]** turn it into a Custom Conversion in Events Manager to optimise on
   it; custom conversions can also be rules on standard events + URL/parameters), TikTok (same name), GA4/Microsoft
   (snake_case; **[vendor]** mark it as a key event / conversion goal), Pinterest (`custom`), Reddit (`CUSTOM`), OpenAI
-  (`custom`), Quora (`Generic`), Taboola (snake_case). They need explicit mapping on Google Ads, LinkedIn, X, Spotify
-  (slot 1–5), Nextdoor (slot 1–10), Taboola/Outbrain (if Realize/Amplify names differ). They are **never sent** to
-  Snapchat (except Snap's own names like `CUSTOM_EVENT_1`) or AppLovin.
+  (`custom`), Quora (`Generic`), Taboola (snake_case). They need explicit mapping on Google Ads, LinkedIn, X,
+  Nextdoor (slot 1–10), Taboola/Outbrain (if Realize/Amplify names differ). They are **never sent** to
+  Snapchat (except Snap's own names like `CUSTOM_EVENT_1`).
 - Google Ads has no event names: each conversion action needs its own label (browser) and action ID (server).
 - Keep custom names short (GA4 truncates to 40 chars, must start with a letter) and free of PII.

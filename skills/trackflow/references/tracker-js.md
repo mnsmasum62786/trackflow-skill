@@ -138,7 +138,7 @@ Canonical keys (Meta naming). The server maps them to each platform's fields.
 | `num_items` | number | Total quantity. |
 | `search_string` | string | Search term for `Search`. |
 | `order_id` | string | Order reference. Google Ads, GA4 and others use it as transaction ID for purchase dedup. |
-| `predicted_ltv`, `status`, `tax`, `shipping`, `plan_id` | various | Read by some platform adapters when present. |
+| `predicted_ltv`, `status`, `plan_id` | various | Read by some platform adapters when present. |
 
 Not mapped from `track()`: GA4-style `items[]`, `transaction_id`, `item_id`. Use `contents`,
 `content_ids` and `order_id`. (GA4 ecommerce *dataLayer pushes* are translated automatically; §6.4.)
@@ -222,7 +222,7 @@ On each page (once tracking is allowed) the tracker stores, on the registrable d
 | `_tf_sid` | 30 min rolling | session ID |
 | `_fbp` | 90 days | Meta browser ID (created by TrackFlow if missing) |
 | `_fbc` | 90 days | Meta click ID, built from `fbclid` in the URL |
-| `_tf_<id>` | 90 days | from URL params `gclid`, `gbraid`, `wbraid`, `dclid`, `msclkid`, `ttclid`, `ScCid` (→`_tf_sccid`), `epik`, `twclid`, `rdt_cid`, `li_fat_id`, `qclid`, `obclid`, `OutbrainClickId` (→`_tf_obclid`), `tblci`, `irclickid`, `oppref`, `ndclid`, `aleid`, `alart` |
+| `_tf_<id>` | 90 days | from URL params `gclid`, `gbraid`, `wbraid`, `dclid`, `msclkid`, `ttclid`, `ScCid` (→`_tf_sccid`), `epik`, `twclid`, `rdt_cid`, `li_fat_id`, `qclid`, `obclid`, `OutbrainClickId` (→`_tf_obclid`), `tblci`, `irclickid`, `oppref`, `ndclid` |
 
 Every server copy carries `fbp`, `fbc`, `ttp` (TikTok `_ttp`), the stored click IDs and first-party IDs
 the platform tags keep (e.g. Snap, Pinterest, Microsoft). Cookies blocked: an in-memory fallback is used
@@ -344,7 +344,7 @@ Every event reaches each plugin with the **same ID** that goes to the server.
 | LinkedIn | Insight Tag | `event_id` |
 | Reddit | Reddit Pixel | `conversionId` |
 | X | `twq` | event ID + `conversion_id` |
-| Quora, Spotify, Nextdoor, OpenAI, AppLovin | vendor pixel | `event_id` / `dedupe_id` |
+| Quora, Nextdoor, OpenAI | vendor pixel | `event_id` |
 | Taboola | `_tfa` | `orderid` + click ID |
 | Outbrain | `obApi` | none (no pixel↔S2S dedup ID) |
 

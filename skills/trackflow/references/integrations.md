@@ -299,7 +299,7 @@ UTC; date-only = 12:00 UTC.
 
 Other platform windows (older rows are `skipped` per destination with "Too old for <Platform> (max N
 days)"): GA4 72 h, TikTok/Pinterest/Reddit/OpenAI 7 days, Snapchat 37 days, LinkedIn/Google Ads/Microsoft
-90 days ([lifecycle-events.md](lifecycle-events.md) §3). AppLovin, Taboola, Outbrain can't use offline
+90 days ([lifecycle-events.md](lifecycle-events.md) §3). Taboola and Outbrain can't use offline
 rows (deliveries `skipped` with the reason).
 
 ### Ways in
@@ -448,7 +448,7 @@ with TrackFlow's redirect URI from the note). `update_destination` with `refresh
 | Shopify / WooCommerce log full of `duplicate` | Normal: several topics per order (create, paid, fulfilled) share `purchase_<order id>`; only the `purchase_on` stage sends, the rest enrich the order record. |
 | Orders `ignored` "Purchase is sent when …" | The order hasn't reached the `purchase_on` stage (e.g. unpaid COD order under `paid`). Choose `created_cod` for cash-on-delivery stores. |
 | Refund/cancel `ignored` "No tracked Purchase for order …" | The order's Purchase was never tracked (or under another order id). Align ids; refunds of untracked orders are deliberately not sent. |
-| Refunds recorded but not on the ad platform | `send_lifecycle` is off for that destination (delivery `skipped`), the platform can't take them (Snapchat, Pinterest, Quora, AppLovin; Google Ads full refunds), or too old. See [lifecycle-events.md](lifecycle-events.md). |
+| Refunds recorded but not on the ad platform | `send_lifecycle` is off for that destination (delivery `skipped`), the platform can't take them (Snapchat, Pinterest, Quora; Google Ads full refunds), or too old. See [lifecycle-events.md](lifecycle-events.md). |
 | Mapped webhook rejected on save: `order_id_path is required` | New Purchase webhooks and any status/refund mapping need `mapping.order_id_path`. |
 | CRM stage changes ignored | Stage not in `stage_map` (often internal ids), or custom map without `keep_defaults`. Check `get_crm_log` reasons. |
 | CRM events ignored "No email, phone…" | Webhook carries ids only: add `api_token`, or include contact fields / `mapping`. |

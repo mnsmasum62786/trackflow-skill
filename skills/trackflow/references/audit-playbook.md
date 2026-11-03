@@ -77,7 +77,7 @@ period: the last 30 days.
   Purchase).
 - `refunds` / `net_revenue` plausible against the shop's own numbers.
 - `send_lifecycle` matches what the customer decided; lifecycle deliveries not silently `skipped` on
-  platforms that can't take them (Snapchat, Pinterest, Quora, AppLovin, Google Ads full refunds).
+  platforms that can't take them (Snapchat, Pinterest, Quora, Google Ads full refunds).
 - Late webhook/offline/refund events: few "Too old for <Platform>" skips on the important platforms
   (otherwise speed up the source or the `purchase_on` stage).
 

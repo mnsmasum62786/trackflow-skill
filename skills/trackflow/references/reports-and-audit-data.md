@@ -85,7 +85,7 @@ integrations and mapped webhooks), `offline`, `crm`, `api`.
 `event`: `event_id`, `event_name`, `origin`, `vid`, `sid`, `url`, `referrer`, `source`/`medium`/
 `campaign` (attributed), `ip`, `user_agent`, `device`, `user_data` (**SHA-256 hashes only**; keys like
 `em`, `ph`, `fn`, `ln`, `ct`, `st`, `zp`, `country`, `external_id` plus platform variants `em_g`,
-`em_r`, `em_gp`, `ph_e164`, `ph_last10`), `custom_data`, `click_ids` (`fbp`, `fbc`, `ttp`, `gclid`…),
+`em_r`, `em_gp`, `ph_e164`), `custom_data`, `click_ids` (`fbp`, `fbc`, `ttp`, `gclid`…),
 `value`, `currency`, `is_conversion`, `match_score`, `status`, `block_reason`, `is_test`, `created_at`.
 
 `deliveries`: one row **per attempt** (a retry or a queued Google Ads restatement adds rows): `type` (platform), `status` (`ok` / `error` /
@@ -101,7 +101,7 @@ Reading deliveries:
 | `skipped` + "Refunds and cancellations are off for this destination" | A lifecycle event (`OrderRefunded`, `OrderCancelled`…) and `send_lifecycle` is off. Expected unless the customer wants it. |
 | `skipped` + "Queued: Google Ads accepts value restatements 24 h after the conversion…" | A partial-refund restatement waiting; a second row appears when it is sent. |
 | `skipped` + "Google Ads retractions … need the Google Ads API" | Full refund / cancellation: Google Ads can't be updated by TrackFlow. Adjust in Google Ads by hand if needed. |
-| `skipped` with another reason | The platform can't use this event (e.g. AppLovin without page URL; Taboola/Outbrain without their click id; unmapped event names). |
+| `skipped` with another reason | The platform can't use this event (e.g. Taboola/Outbrain without their click id; unmapped event names). |
 | Meta HTTP 400 "Invalid OAuth access token" / code 190 | Token wrong, expired, revoked, or for another business. New token → `update_destination` → retry. |
 | Meta HTTP 400 mentioning the pixel/dataset id | Pixel id typo, or the token's system user has no access to that pixel. |
 | Meta HTTP 400 about `event_time` | Event too old (Meta: 7 days; 62 for `physical_store`) — typical for offline/CRM backfills. |

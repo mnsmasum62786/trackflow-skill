@@ -257,7 +257,7 @@ Gotcha: test events are delivered **only to destinations that have a test mode c
 
 ## 7. Group `destinations`
 
-Platform ids (from `list_platforms`): `applovin, ga4, google_ads, linkedin, meta, microsoft, nextdoor, openai, outbrain, pinterest, quora, reddit, snapchat, spotify, taboola, tiktok, x`. Always read `list_platforms` for the exact field keys.
+Platform ids (from `list_platforms`): `ga4, google_ads, linkedin, meta, microsoft, nextdoor, openai, outbrain, pinterest, quora, reddit, snapchat, taboola, tiktok, x`. Always read `list_platforms` for the exact field keys.
 
 Modes: `both` (browser tag + server API, recommended), `browser` (tag only, no server secret), `server` (server API only, no tag). Field `need` levels: `always`; `browser` (needed in both|browser); `server` (needed in both|server); `null` = optional (see its `why`). Only ask the customer for the fields the chosen mode needs.
 
