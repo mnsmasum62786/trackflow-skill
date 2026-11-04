@@ -105,7 +105,7 @@ Empty values (`""`, `null`) are dropped before sending.
 | `value` | number | Major units (`129.90`, not cents). Converted with `Number()`. A **numeric string** (`"49.90"`) is fine; a string with symbols or separators (`"$1,299.00"`) is **not parsed** by the JS API or server API (only container tags parse prices). |
 | `currency` | string | ISO 4217. Uppercased and validated: an invalid code (`"$"`, `"EURO"`) is dropped. **If `value` is set and the currency is missing or invalid, TrackFlow uses the site's `default_currency`, else `USD`.** Set `default_currency` with `update_site` for non-USD shops. |
 | `content_ids` | string[] | Product IDs / SKUs; match catalog IDs for catalog/dynamic ads. Used to build items when `contents` is absent (quantity 1). |
-| `contents` | `[{id, quantity, item_price}]` | Preferred item list (wins over `content_ids`). `item_price` = unit price. |
+| `contents` | `[{id, quantity, item_price}]` | Preferred item list (wins over `content_ids`). `item_price` = unit price. Rows with the same `id` are merged automatically (quantities added, `num_items` recalculated) and `content_ids` is made unique, in the browser and on the server. |
 | `content_type` | string | `product` or `product_group`. |
 | `content_name` | string | Product/page name (single-item name on GA4, OpenAI, Microsoft). |
 | `content_category` | string | Category. |
