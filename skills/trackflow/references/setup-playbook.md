@@ -7,6 +7,10 @@ Group tools are called as `{"action": "<action>", "site_id": N, ...}` (see [mcp-
 
 Ask in one short message, in the customer's language. Skip anything you already know.
 
+If the customer gave only a website link or doesn't know which events they need, don't ask what to track:
+follow [event-planning.md](event-planning.md) (look at the site, work out the business type, recommend events, get
+approval), then continue here with the approved list.
+
 | Ask | Why |
 |---|---|
 | Website address | `list_sites` / `create_site` |
@@ -65,7 +69,9 @@ dashboard for something a tool can do.
 ## Phase 3: plan, then build in the draft
 
 State the plan in one or two sentences ("I'll track product views, add-to-cart, checkout and purchases
-with the order total, and send them to Facebook and TikTok"). Then pick the building blocks:
+with the order total, and send them to Facebook and TikTok"), or, when the customer didn't say what to track, show
+the recommended-events table from [event-planning.md](event-planning.md) and wait for approval. Then pick the
+building blocks:
 
 | Business | What to build |
 |---|---|

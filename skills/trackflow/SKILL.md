@@ -1,6 +1,6 @@
 ---
 name: trackflow
-description: Set up, audit and fix website conversion tracking with TrackFlow (trackflow.webanalyticssolution.com) through its MCP server or REST API. Covers the install tag, Meta Pixel + Conversions API, TikTok, Google Ads, GA4, Snapchat, Pinterest, LinkedIn and other ad platforms, browser + server deduplication, event parameters, the built-in tag manager, first-party tracking domains, checkout/CRM/offline conversions, refunds and cancellations, visitor-id passthrough, CMS installs (Shopify Customer Events, WordPress/WooCommerce, Wix, Webflow, Squarespace, Next.js) and tracking audits. Use whenever the user mentions TrackFlow, its MCP tools, or asks to track conversions, pixels or CAPI on a site connected to TrackFlow.
+description: Set up, audit and fix website conversion tracking with TrackFlow (trackflow.webanalyticssolution.com) through its MCP server or REST API. Covers the install tag, Meta Pixel + Conversions API, TikTok, Google Ads, GA4, Snapchat, Pinterest, LinkedIn and other ad platforms, browser + server deduplication, event parameters, the built-in tag manager, first-party tracking domains, checkout/CRM/offline conversions, refunds and cancellations, visitor-id passthrough, CMS installs (Shopify Customer Events, WordPress/WooCommerce, Wix, Webflow, Squarespace, Next.js) and tracking audits. Use whenever the user mentions TrackFlow, its MCP tools, or asks to track conversions, pixels or CAPI on a site connected to TrackFlow. Also plans tracking from just a website link: recognises the business type (ecommerce, home services/HVAC, dental, real estate, SaaS, legal…), recommends events and builds what the customer approves.
 ---
 
 # TrackFlow
@@ -123,7 +123,17 @@ destinations {"action": "help", "of": "add_destination"}
 14. **Plain language.** The customer is usually not technical. Explain what you did and what it means
     for their ads ("Facebook will now see every purchase with its amount"), not tool names.
 
-## 3. Setup workflow (summary)
+## 3. Customer gives only a link, or doesn't know what to track
+
+Don't ask them to list events. Find the site (`list_sites`), look at it (`inspect_site` on the home page and up to 6
+key pages from its `links`), work out the type of business (ecommerce, home services such as HVAC or plumbing,
+dental/medical, real estate, legal/finance, SaaS, restaurant, education, …), and recommend the events that matter for
+it as a short numbered table: primary conversions plus supporting events, each tied to the page or button it comes
+from, with recommended ones marked. Build **only after the customer approves** ("approve" = the recommended rows,
+or the numbers they pick). Full method, signals and per-business event lists:
+[references/event-planning.md](references/event-planning.md).
+
+## 4. Setup workflow (summary)
 
 Full step-by-step version with checklists: [references/setup-playbook.md](references/setup-playbook.md).
 
@@ -166,7 +176,7 @@ Full step-by-step version with checklists: [references/setup-playbook.md](refere
     cross-domain funnels.
 12. **Report back** in plain language: what is tracked, where it goes, what the customer still has to do.
 
-## 4. Audit workflow (summary)
+## 5. Audit workflow (summary)
 
 Full version with a symptom → cause → fix table:
 [references/audit-playbook.md](references/audit-playbook.md) and
@@ -184,7 +194,7 @@ Full version with a symptom → cause → fix table:
 7. Write findings as: problem → impact on ads → fix → who does it (you or the customer). Fix what
    the tools can fix once the customer agrees.
 
-## 5. Reference map
+## 6. Reference map
 
 | Need | File |
 |---|---|
@@ -200,6 +210,7 @@ Full version with a symptom → cause → fix table:
 | Refunds, cancellations, renewals, no-shows: `send_lifecycle`, what each platform does, max event age, net revenue, cash on delivery | [references/lifecycle-events.md](references/lifecycle-events.md) |
 | Custom tracking domain, ad-blocker resistance, blocking rules | [references/first-party-domain.md](references/first-party-domain.md) |
 | Reading reports, event statuses, match quality | [references/reports-and-audit-data.md](references/reports-and-audit-data.md) |
+| Website link only / which events to track: business type → recommended events → approval | [references/event-planning.md](references/event-planning.md) |
 | Step-by-step setup checklist | [references/setup-playbook.md](references/setup-playbook.md) |
 | Step-by-step audit checklist | [references/audit-playbook.md](references/audit-playbook.md) |
 

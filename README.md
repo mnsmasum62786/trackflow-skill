@@ -6,6 +6,7 @@ and its MCP server to set up, test and audit website conversion tracking, with a
 
 With the skill installed and TrackFlow connected, you can say things like:
 
+> "Here's my website: example.com. Set up the tracking it needs."
 > "Track purchases and add-to-cart on my Shopify store for Facebook and TikTok."
 > "Audit my tracking and tell me why Meta shows fewer purchases than my shop."
 > "Send my CRM's qualified leads to Google Ads as offline conversions."
@@ -30,6 +31,7 @@ everything, publishes and verifies the live events.
 | Refunds, cancellations, renewals and cash on delivery | [`lifecycle-events.md`](skills/trackflow/references/lifecycle-events.md) |
 | First-party tracking domain (ad-blocker resistance), blocking rules | [`first-party-domain.md`](skills/trackflow/references/first-party-domain.md) |
 | Reading reports and diagnosing problems | [`reports-and-audit-data.md`](skills/trackflow/references/reports-and-audit-data.md) |
+| From a website link: business type, recommended events, approval | [`event-planning.md`](skills/trackflow/references/event-planning.md) |
 | Setup and audit checklists | [`setup-playbook.md`](skills/trackflow/references/setup-playbook.md), [`audit-playbook.md`](skills/trackflow/references/audit-playbook.md) |
 
 ## Step 1: connect TrackFlow to your AI
